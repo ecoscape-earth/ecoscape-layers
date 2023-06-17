@@ -230,7 +230,7 @@ def reproject_shapefile(shapes_path, dest_crs, shapes_layer=None, file_path=None
     Returns a list of reprojected features.
 
     str shapes_path: file path to the shapefile or geopackage to reproject
-    str dest_crs: CRS to reproject to, as a WKT string
+    str dest_crs: CRS to reproject to, as an ESRI WKT string
     str shapes_layer: if file is a geopackage, use this to specify which layer should be reprojected
     str file_path: if specified, write the reprojected result to this file path as a shapefile
     """
