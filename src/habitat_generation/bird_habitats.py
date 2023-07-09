@@ -20,31 +20,27 @@ def generate_habitats(species_list_path, terrain_path, output_folder, terrain_co
     :param resampling: Type of resampling to use when reprojecting the input tiffs; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid arguments
     :param padding: padding in units of chosen CRS to add around the bounds
     :param refine_method: What terrain should be considered as good habitat: "forest", "forest_add308", "allsuitable", "majoronly"
-    :param reproject_inputs: Set True to produce new terrain file with provided resolution/resampling/CRS setting and terrain_codes_path file
+    :param reproject_inputs: Set True to reproject terrain to the CRS, resolution, and resampling method given. Outputs new terrain and new terrain_codes_path
     :param species_range_folder: For specifying custom shapefile range inputs for species. Not implemented yet
     """
     
-    if crs is None:
-        crs = 'PROJCS["Albers_Conical_Equal_Area",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Albers_Conic_Equal_Area"],PARAMETER["latitude_of_center",23],PARAMETER["longitude_of_center",-96],PARAMETER["standard_parallel_1",29.5],PARAMETER["standard_parallel_2",45.5],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'
-
     # if reproject_inputs, we generate new terrain_codes CSV in the output folder
     if reproject_inputs:
         terrain_codes_path = output_folder
 
-    # Check for valid inputs
+    # validate inputs
     assert os.path.isfile(terrain_path), "invalid terrain_path"
     assert os.path.isfile(species_list_path), "invalid species_list_path"
     assert os.path.isdir(output_folder), f"output_folder {output_folder} is not a valid directory"
-
-    if reproject_inputs:
-        assert os.path.isdir(os.path.dirname(terrain_codes_path)), f"terrain_codes_path {terrain_codes_path} is not a directory. \
-            Either set reproject_inputs to False to not generate new terrain_codes_path, or provide a directory for terrain_codes_path"
-    else:
-        assert os.path.isfile(terrain_codes_path), f"terrain_codes_path {terrain_codes_path} does not exist; set reproject_inputs to True to generate"
-
+    assert os.path.isfile(terrain_codes_path), f"terrain_codes_path {terrain_codes_path} does not exist; set reproject_inputs to True to generate"
     assert resolution == None or isinstance(resolution, int), "invalid resolution"
     assert resampling in ["near", "bilinear", "cubic", "cubicspline", "lanczos", "average", "rms", "mode", "max", "min", "med", "q1", "q3", "sum"], \
                 f"{resampling} is not a valid resampling value. See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid arguments"
+
+    # If CRS not specified, inherit CRS of terrain geotiff
+    if crs is None:
+        with GeoTiff.from_file(terrain_path) as ter:
+            crs = ter.crs
 
     if species_range_folder is None:
         # Specify eBird range file locations if no input ranges folder is specified
@@ -87,20 +83,16 @@ def generate_habitats(species_list_path, terrain_path, output_folder, terrain_co
     )
 
     # If reproject_inputs, reproject and crop the input terrain.
-
     if reproject_inputs:
         habitat_generator.reproject_terrain()
-        # Crop terrain if bounds are specified
-        if bounds is not None:
-            habitat_generator.crop_terrain(bounds=bounds, padding=padding)
-        habitat_generator.write_map_codes()
-        # Once it's done once, don't do it again
-        reproject_inputs = False
+
+    # Crop terrain if bounds are specified
+    if bounds is not None:
+        habitat_generator.crop_terrain(bounds=bounds, padding=padding)
+    habitat_generator.write_map_codes()
 
     # Obtain species habitat information from the IUCN Red List.
-
     species_data = []
-
     for species in species_list:
         sci_name = redlist.get_scientific_name(species)
         # When eBird's scientific name differs from that on Red List, we manually correct it here
