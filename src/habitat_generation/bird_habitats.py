@@ -6,10 +6,12 @@ from habitats import RedList, HabitatGenerator, reproject_shapefile
 from scgt import GeoTiff
 
 
+
 def generate_habitats(species_list_path, terrain_path, output_folder, terrain_codes_path=None,
                         bounds=None, crs=None, resolution=None, resampling="near", padding=200000,
                         refine_method="forest_add308", reproject_inputs=False, species_range_folder=None):
     """
+    Runner function for habitat generation
     :param species_list_path: Path to txt file of the bird species, with 6-letter eBird species codes on individual lines
     :param terrain_path: Path to terrain raster
     :param output_folder: Folder to place habitat output files and terrain-to-resistance csv files in
@@ -26,16 +28,7 @@ def generate_habitats(species_list_path, terrain_path, output_folder, terrain_co
     
     # if reproject_inputs, we generate new terrain_codes CSV in the output folder
     if reproject_inputs:
-        terrain_codes_path = output_folder
-
-    # validate inputs
-    assert os.path.isfile(terrain_path), "invalid terrain_path"
-    assert os.path.isfile(species_list_path), "invalid species_list_path"
-    assert os.path.isdir(output_folder), f"output_folder {output_folder} is not a valid directory"
-    assert os.path.isfile(terrain_codes_path), f"terrain_codes_path {terrain_codes_path} does not exist; set reproject_inputs to True to generate"
-    assert resolution == None or isinstance(resolution, int), "invalid resolution"
-    assert resampling in ["near", "bilinear", "cubic", "cubicspline", "lanczos", "average", "rms", "mode", "max", "min", "med", "q1", "q3", "sum"], \
-                f"{resampling} is not a valid resampling value. See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid arguments"
+        terrain_codes_path = os.path.join(output_folder, "terrain_codes_path")
 
     # If CRS not specified, inherit CRS of terrain geotiff
     if crs is None:

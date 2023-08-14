@@ -1,61 +1,68 @@
-# import argparse
-# import os
-# from repopulation import analyze_tile_torch, analyze_geotiffs
-# from util import read_transmission_csv, createdir_for_file
+import argparse
+import os
+from constants import RESAMPLING_METHODS, REFINE_METHODS
+from bird_habitats import generate_habitats
 
-# def main(args):
-#     # Reads and transltes the resistance dictionary.
-#     transmission_d = read_transmission_csv(args.resistance)
-#     # Creates output folders, if missing.
-#     createdir_for_file(args.repopulation)
-#     do_gradient = args.gradient is not None
+def main(args):
+    output_folder = os.getcwd()
 
-#     # Do the bird run
-#     # builds the analysis function, which is passed to analyze_geotiffs below.
-#     analysis_fn = analyze_tile_torch(
-#         num_simulations=args.num_simulations,
-#         hop_length=args.hop_distance,
-#         total_spreads=args.num_spreads,
-#         seed_density=args.seed_density,
-#         produce_gradient=do_gradient,
-#     )
-#     # Performs the analysis
-#     analyze_geotiffs(
-#         args.habitat, args.terrain, transmission_d,
-#         analysis_fn=analysis_fn,
-#         single_tile=True,
-#         generate_gradient=do_gradient,
-#         output_repop_fn=args.repopulation,
-#         output_grad_fn=args.gradient,
-#     )
+    print(f"Calling generate_habitats with:\n\t\
+            species_list {args.species_list}\n\t\
+            terrain {args.terrain}\n\t\
+            output_folder {output_folder}\n\t\
+            resistance_codes {args.resistance_codes}\n\t\
+            bounds {args.bounds}\n\t\
+            crs {args.crs}\n\t\
+            resolution {args.resolution}\n\t\
+            resampling {args.resampling}\n\t\
+            padding {args.padding}\n\t\
+            refine_method {args.refine_method}\n\t\
+            reproject_inputs {args.reproject_inputs}\n\t\
+                ")
 
-# if __name__ == '__main__':
-#     # main(argparse.Namespace(habitat='/tests/assets/habitat_uint8.tif', terrain='/tests/assets/terrain_uint8.tif', resistance='tests/assets/transmission_refined_0.5.csv', repopulation='./repopulation_uint8.tif', gradient=None, hop_distance=4, num_spreads=400, num_simulations=2, seed_density=4))
-#     # main(argparse.Namespace(habitat='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/habitat_float32.tif', terrain='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/terrain_float32.tif', resistance='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/transmission_refined_0.5.csv', repopulation='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/repopulation_float32.tif', gradient=None, hop_distance=4, num_spreads=15, num_simulations=50, batch_size=1, seed_density=4))
+    # validate inputs
+    assert os.path.isfile(args.species_list), f"{args.species_list} is an invalid species_list"
+    assert os.path.isfile(args.terrain), f"{args.terrain} is an invalid terrain_path"
+    assert os.path.isdir(output_folder), f"output_folder {output_folder} is not a valid directory"
+    assert args.resolution == None or isinstance(args.resolution, int), "invalid resolution"
+    assert args.refine_method in REFINE_METHODS, f"{args.resampling} is not a valid refine method. Value must be in {REFINE_METHODS}"
+    assert args.resampling in RESAMPLING_METHODS, \
+                f"{args.resampling} is not a valid resampling value. See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid arguments"
+    if not args.reproject_inputs:
+        assert os.path.isfile(args.resistance_codes), f"resistance_codes {args.resistance_codes} does not exist; set reproject_inputs to True to generate"
+
+    generate_habitats(args.species_list, args.terrain, output_folder, args.resistance_codes,
+                        args.bounds, args.crs, args.resolution, args.resampling, args.padding,
+                        args.refine_method, args.reproject_inputs)
+
+    print("ran generate_habitats")
+
+if __name__ == '__main__':
+    # main(argparse.Namespace(habitat='/tests/assets/habitat_uint8.tif', terrain='/tests/assets/terrain_uint8.tif', resistance='tests/assets/transmission_refined_0.5.csv', repopulation='./repopulation_uint8.tif', gradient=None, hop_distance=4, num_spreads=400, num_simulations=2, seed_density=4))
+    # main(argparse.Namespace(habitat='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/habitat_float32.tif', terrain='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/terrain_float32.tif', resistance='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/transmission_refined_0.5.csv', repopulation='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/repopulation_float32.tif', gradient=None, hop_distance=4, num_spreads=15, num_simulations=50, batch_size=1, seed_density=4))
     
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument('-H', '--habitat', type=os.path.abspath, default=None,
-#                         help='Filename to a geotiff of the bird\'s habitat.')
-#     parser.add_argument('-T', '--terrain', type=os.path.abspath, default=None,
-#                         help='Filename to a geotiff of the terrain.')
-#     parser.add_argument('-R', '--resistance', type=os.path.abspath, default=None,
-#                         help='Filename to a CSV dictionary of the terrain value resistance.')
-#     parser.add_argument('-r', '--repopulation', type=os.path.abspath, default=None,
-#                         help='Filename to output geotiff file for repopulation.')
-#     parser.add_argument('-g', '--gradient', type=os.path.abspath, default=None,
-#                         help='Filename to output geotiff file for gradient.')
-    
-#     parser.add_argument('-d', '--hop_distance', type=int, default=4,
-#                         help='Distance the bird can travel in one flight.')
-#     parser.add_argument('-s', '--num_spreads', type=int, default=15,
-#                         help='Number of spreads for the model to compute.')
-#     parser.add_argument('-b', '--batch_size', type=int, default=1,
-#                         help='Batch size of each simulation. 1 if running on one core, otherwise 400 is best for GPU')
-#     parser.add_argument('-S', '--num_simulations', type=int, default=200,
-#                         help='Number of repopulation simulations to be run.')
-#     parser.add_argument('-D', '--seed_density', type=int, default=4,
-#                         help='Density of random seeds in the simulation.')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-s', '--species_list', type=os.path.abspath, default=None,
+                        help='Path to txt file of the bird species, with 6-letter eBird species codes on individual lines')
+    parser.add_argument('-t', '--terrain', type=os.path.abspath, default=None,
+                        help='Path to terrain raster')
+    parser.add_argument('-r', '--resistance_codes', type=os.path.abspath, default=None,
+                        help='Path to a CSV containing terrain resistance codes. If not generated, it can be generated by setting reproject_inputs to True')
+    parser.add_argument('-c', '--crs', type=str, default=None,
+                        help='Chosen CRS to reproject all input files to, as an ESRI WKT string.')
+    parser.add_argument('-R', '--resolution', type=int, default=None,
+                        help='Resolution in the units of the chosen CRS. Set to None to just use the current resolution of the terrain raster')
+    parser.add_argument('-e', '--resampling', type=str, default="near",
+                        help='Type of resampling to use when reprojecting the input tiffs; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid arguments')
+    parser.add_argument('-p', '--padding', type=int, default=200000,
+                        help='Padding in units of chosen CRS to add around the bounds')
+    parser.add_argument('-m', '--refine_method', type=str, default="forest_add308",
+                        help='What terrain should be considered as good habitat ("forest", "forest_add308", "allsuitable", or "majoronly")')
+    parser.add_argument('-i', '--reproject_inputs', type=bool, default=False,
+                        help='Set True to reproject terrain to the CRS, resolution, and resampling method given. Produces new terrain and new terrain_codes_path')
+    parser.add_argument('-b', '--bounds', type=tuple, default=None,
+                        help='tuple bounds: bounding box (xmin, ymin, xmax, ymax) for the output (in the same coordinate system)')
 
-#     args = parser.parse_args()
-#     main(args)
+    args = parser.parse_args()
+    main(args)
     

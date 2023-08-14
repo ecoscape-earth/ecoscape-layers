@@ -8,8 +8,8 @@ from rasterio import features
 from pyproj import Transformer
 from ebird.api import get_taxonomy
 from shapely.geometry import shape
-from birdmaps.scgt import GeoTiff, Window
-from birdmaps.config import EBIRD_KEY, REDLIST_KEY
+from scgt import GeoTiff, Window
+from config import EBIRD_KEY, REDLIST_KEY
 
 """
 Module of functions that involve interfacing with the Red List API
@@ -141,7 +141,7 @@ class HabitatGenerator(object):
         Downloads range map shapefiles from eBird by using the ebirdst R package.
         This utilizes the R script "ebird_range_download.R" to download the ranges.
         """
-        result = subprocess.run(["Rscript", "./ebird_range_download.R", species_list_path, species_range_folder], capture_output=True, text=True)
+        result = subprocess.run(["R", "./ebird_range_download.R", species_list_path, species_range_folder], capture_output=True, text=True)
         if result.returncode != 0:
             print(result)
             raise AssertionError("Problem occurred while downloading ranges")
