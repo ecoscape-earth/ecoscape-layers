@@ -11,34 +11,45 @@ from shapely.geometry import shape
 from scgt import GeoTiff, Window
 from config import EBIRD_KEY, REDLIST_KEY
 
-"""
-Module of functions that involve interfacing with the Red List API
-"""
 class RedList():
+    """
+    A module of functions that involve interfacing with the IUCN Red List API.
+    """
 
     def __init__(self):
+        """
+        Initializes a RedList object.
+        An API key is required to access the IUCN Red List API; see the documentation for more information.
+        """
         self.params = { "token": REDLIST_KEY }
 
     def get_from_redlist(self, url):
         """
-        Convenience function for sending GET request to Red List API with the key
+        Convenience function for sending GET request to Red List API with the key.
+
+        :param url: the URL for the request.
+        :return: response for the request.
         """
         res = requests.get(url, params=self.params).json()
         return res["result"]
 
     def get_scientific_name(self, species):
         """
-        Translates eBird codes to scientific names for use in Red List
+        Translates eBird codes to scientific names for use in Red List.
+
+        :param species: a 6-letter eBird code for a bird species.
+        :return: the scientific name of the bird species.
         """
         return get_taxonomy(EBIRD_KEY, species=species)[0]["sciName"]
 
     def get_habitats(self, name, region=None):
         """
         Gets habitat assessments for suitability for a given species.
-        Also adds the associated terrain map's code and resistance value, which are useful.
+        This also adds the associated terrain map's code and resistance value to the API response, which are useful for creating resistance mappings and/or habitat layers.
 
-        str name: scientific name of the species
-        str region: specific region to assess habitats in (https://apiv3.iucnredlist.org/api/v3/docs#regions)
+        :param name: scientific name of the species.
+        :param region: a specific region to assess habitats in (see https://apiv3.iucnredlist.org/api/v3/docs#regions).
+        :return: a list of habitats identified by the IUCN Red List as suitable for the species.
         """
         url = "https://apiv3.iucnredlist.org/api/v3/habitats/species/name/{0}".format(name)
         if region is not None:
@@ -58,18 +69,28 @@ class RedList():
         return habs
 
 
-"""
-For things like reprojecting, building resistance tables, processing the terrain.
-Keeps track of a common CRS, resolution, and resampling method for this purpose.
-"""
 class HabitatGenerator(object):
+    """
+    For things like reprojecting, building resistance tables, and creating habitat layers and matrix (terrain) layers.
+    This class maintains a common CRS, resolution, and resampling method for this purpose.
+    """
 
     def __init__(self, terrain_path, terrain_codes_path, crs, resolution=None, resampling="near"):
+        """
+        Initializes a HabitatGenerator object.
+
+        :param terrain_path: file path to the initial terrain raster.
+        :param terrain_codes_path: file path to a CSV containing terrain resistance codes. If not generated, it may be generated from the terrain using the generate_resistance_table method.
+        :param crs: desired common CRS of the layers as an ESRI WKT string.
+        :param resolution: desired resolution of the layers in the units of the CRS as an integer.
+        :param resampling: resampling method if resampling is necessary to produce layers with the desired CRS and/or resolution.
+        """
         self.terrain_path = terrain_path
         self.terrain_codes_path = terrain_codes_path
         self.crs = crs
         self.resolution = resolution
         self.resampling = resampling
+
         # rio_resampling accounts for rasterio's different resampling parameter names from gdal
         if self.resampling == "near":
             self.rio_resampling = "nearest"
@@ -80,7 +101,8 @@ class HabitatGenerator(object):
 
     def reproject_terrain(self):
         """
-        Reprojects terrain to the CRS and resolution desired using the chosen resampling method.
+        Reprojects the terrain to the CRS and resolution desired using the chosen resampling method, creating a new file in doing so.
+        terrain_path is assigned to the path of this new file.
         The CRS, resolution, and resampling method are taken from the current class instance's settings.
         """
         with GeoTiff.from_file(self.terrain_path) as ter:
@@ -95,8 +117,11 @@ class HabitatGenerator(object):
 
     def crop_terrain(self, bounds, padding=0):
         """
-        Crop terrain to a certain bounding rectangle with optional padding.
-        This does not modify the existing file, but creates a new one.
+        Crops the terrain to a certain bounding rectangle with optional padding.
+        This does not modify the existing file, but creates a new one that terrain_path is assigned to.
+
+        :param bounds: bounds to crop the terrain layer, specified as a bounding box (xmin, ymin, xmax, ymax).
+        :param padding: padding to add around the bounds in the units of the current CRS.
         """
         with GeoTiff.from_file(self.terrain_path) as file:
             cropped_terrain_path = self.terrain_path[:-4] + "_cropped.tif"
@@ -106,8 +131,8 @@ class HabitatGenerator(object):
 
     def get_map_codes(self):
         """
-        Obtains the list of unique terrain map codes from terrain_codes_path.
-        Used to determine the map codes for which resistance values need to be defined.
+        Obtains the list of unique terrain map codes from terrain_codes_path, if the file path exists.
+        This is used to determine the map codes for which resistance values need to be defined.
         """
         all_map_codes = []
         with open(self.terrain_codes_path, newline="") as ter_codes:
@@ -117,8 +142,7 @@ class HabitatGenerator(object):
 
     def write_map_codes(self):
         """
-        Finds the unique map code values from the terrain tiff and writes them to a CSV,
-        to make creating resistance tables easier later.
+        Finds the unique map code values from the terrain tiff and writes them to a CSV located at terrain_codes_path, for creating resistance tables later.
         """
         all_map_codes = set()
 
@@ -140,47 +164,54 @@ class HabitatGenerator(object):
         """
         Downloads range map shapefiles from eBird by using the ebirdst R package.
         This utilizes the R script "ebird_range_download.R" to download the ranges.
+        An API key for eBird is required; see the documentation for more information.
+
+        :param species_list_path: list of species to download range map shapefiles for, given as 6-letter eBird codes.
+        :param species_range_folder: folder to which the downloaded range maps should be saved.
         """
         result = subprocess.run(["R", "./ebird_range_download.R", species_list_path, species_range_folder], capture_output=True, text=True)
         if result.returncode != 0:
             print(result)
             raise AssertionError("Problem occurred while downloading ranges")
 
-    def generate_resistance_table(self, species, output_path, map_codes):
+    def generate_resistance_table(self, habitats, map_codes, output_path):
         """
-        Generates the terrain-to-resistance table for a given species as a CSV file.
-        - major importance terrain is assigned 0 resistance
-        - suitable (but not major importance) terrain is assigned 0.1 resistance
-        - all other terrains are assigned 1 resistance
+        Generates the terrain-to-resistance table for a given species as a CSV file using habitat preference data from the IUCN Red List.
+        - Major importance terrain is assigned a resistance of 0.
+        - Suitable (but not major importance) terrain is assigned a resistance of 0.1.
+        - All other terrains are assigned a resistance of 1.
 
-        str output_path: path to CSV file to which resistance table should be saved
-        list map_codes: list of map codes to assign resistances to, obtainable from get_map_codes().
+        :param habitats: IUCN Red List habitat data for the species for which the table should be generated.
+        :param map_codes: list of all map codes to assign resistances to; obtainable from get_map_codes(), provided that terrain_codes_path exists.
+        :param output_path: path of CSV file to which the species' resistance table should be saved.
         """
         with open(output_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(species["habitats"][0].keys())
+            writer.writerow(habitats[0].keys())
             # map codes from the terrain map
             for map_code in map_codes:
-                h = next((hab for hab in species["habitats"] if hab["map_code"] == map_code), None)
+                h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
                 if h is not None:
                     writer.writerow(h.values())
                 else:
                     writer.writerow([''] * 5 + [map_code] + [1])
 
-    def refine_habitat(self, ter, species, shapes, output_path, refine_method="majoronly"):
+    def refine_habitat(self, ter, habitats, shapes, output_path, refine_method="forest_add308"):
         """
-        Creates the habitat for a given species based on terrain and range.
+        Creates the habitat layer for a given species based on the terrain and range map.
 
-        ter: opened terrain Geotiff
-        list shapes: list of shapes to use for range. They should be given in the same projection as the terrain.
-        str refine_method: "forest", "suitable", or "major" to decide what terrain should be considered for habitat
+        :param ter: open instance of the terrain GeoTiff.
+        :param habitats: IUCN Red List habitat data for the species for which the habitat layer should be generated.
+        :param shapes: list of shapes to use as the range map, given in the same projection as the terrain.
+        :param output_path: file path to save the habitat layer to.
+        :param refine_method: used to decide what terrain should be considered for habitat.
         """
 
         shapes = [shape(shapes["geometry"])]
 
         with ter.clone_shape(output_path) as output:
             reader = output.get_reader(b=0, w=10000, h=10000)
-            good_terrain_for_hab = self.get_good_terrain(species, refine_method)
+            good_terrain_for_hab = self.get_good_terrain(habitats, refine_method)
 
             for tile in reader:
                 # get window and fit to the tiff's bounds if necessary
@@ -202,38 +233,48 @@ class HabitatGenerator(object):
             if os.path.isfile(output_path + ".aux.xml"):
                 os.remove(output_path + ".aux.xml")
 
-    def get_good_terrain(self, species, refine_method="forest"):
+    def get_good_terrain(self, habitats, refine_method="forest_add308"):
         """
         Determine the terrain deemed suitable for habitat based on the refining method.
         This decides what terrain map codes should be used to filter the habitat.
+
+        :param habitats: IUCN Red List habitat data for the species for which suitable terrain is computed.
+        :param refine_method: method by which habitat pixels should be selected. See documentation for detailed descriptions of each option.
+        :return: list of terrain map codes filtered by refine_method.
         """
+
         if refine_method == "forest":
             return [x for x in range(100, 110)]
         elif refine_method == "forest_add308":
             return [x for x in range(100, 110)] + [308]
         elif refine_method == "allsuitable":
-            return [hab["map_code"] for hab in species["habitats"] if hab["suitability"] == "Suitable"]
+            return [hab["map_code"] for hab in habitats if hab["suitability"] == "Suitable"]
         elif refine_method == "majoronly":
-            return [hab["map_code"] for hab in species["habitats"] if hab["majorimportance"] == "Yes"]
+            return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
 
     def append_settings_to_name(self, file_path):
         """
         Adds the resolution and resampling settings to the file path name.
-        If old file name is "filename.extension", new name is "filename_[resolution]_[resampling].extension".
+        If the old file name is "filename.ext", the new name is "filename_[resolution]_[resampling].ext".
+
+        :param file_path: file path to modify.
+        :return: modified version of the file path.
         """
+
         sep = file_path.index(".")
         return file_path[:sep] + "_" + str(self.resolution) + "_" + self.resampling + file_path[sep:]
 
 def reproject_shapefile(shapes_path, dest_crs, shapes_layer=None, file_path=None):
     """
-    This takes a specified shapefile or geopackage and reprojects it to a different CRS.
-    Returns a list of reprojected features.
+    Takes a specified shapefile or geopackage and reprojects it to a different CRS.
 
-    str shapes_path: file path to the shapefile or geopackage to reproject
-    str dest_crs: CRS to reproject to, as an ESRI WKT string
-    str shapes_layer: if file is a geopackage, use this to specify which layer should be reprojected
-    str file_path: if specified, write the reprojected result to this file path as a shapefile
+    :param shapes_path: file path to the shapefile or geopackage to reproject.
+    :param dest_crs: CRS to reproject to as an ESRI WKT string.
+    :param shapes_layer: if file is a geopackage, the name of the layer that should be reprojected.
+    :param file_path: if specified, the file path to write the reprojected result to as a shapefile.
+    :return: list of reprojected features.
     """
+
     myfeatures = []
 
     with fiona.open(shapes_path, 'r', layer=shapes_layer) as shp:

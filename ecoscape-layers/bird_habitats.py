@@ -118,7 +118,7 @@ def generate_habitats(species_list_path, terrain_path, output_folder, terrain_co
     for species in species_data:
         code = species["name"]
         resistance_output_path = os.path.join(output_folder, code, "resistance.csv")
-        habitat_generator.generate_resistance_table(species, resistance_output_path, all_map_codes)
+        habitat_generator.generate_resistance_table(species["habitats"], all_map_codes, resistance_output_path)
 
     # Perform the intersection between the range and habitable terrain.
     with GeoTiff.from_file(habitat_generator.terrain_path) as ter:
