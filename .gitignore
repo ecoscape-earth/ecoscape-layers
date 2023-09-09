@@ -1,3 +1,10 @@
+ecoscape_layers/__pycache__/
 inputs/*
 outputs/*
+tests/__pycache__/
+tests/inputs/*
 tests/outputs/*
+tests/config.py
+
+!tests/inputs/species_list.txt
+!tests/inputs/ter.tif

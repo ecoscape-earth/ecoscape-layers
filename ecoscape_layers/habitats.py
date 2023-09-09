@@ -5,23 +5,24 @@ import numpy as np
 import csv
 import fiona
 from rasterio import features
+from rasterio.windows import Window
 from pyproj import Transformer
 from ebird.api import get_taxonomy
 from shapely.geometry import shape
-from scgt import GeoTiff, Window
-from config import EBIRD_KEY, REDLIST_KEY
+from scgt import GeoTiff
 
 class RedList():
     """
     A module of functions that involve interfacing with the IUCN Red List API.
     """
 
-    def __init__(self):
+    def __init__(self, redlist_key, ebird_key):
         """
         Initializes a RedList object.
-        An API key is required to access the IUCN Red List API; see the documentation for more information.
+        API keys are required to access the IUCN Red List API and eBird API respectively; see the documentation for more information.
         """
-        self.params = { "token": REDLIST_KEY }
+        self.redlist_params = { "token": redlist_key }
+        self.ebird_key = ebird_key
 
     def get_from_redlist(self, url):
         """
@@ -30,7 +31,7 @@ class RedList():
         :param url: the URL for the request.
         :return: response for the request.
         """
-        res = requests.get(url, params=self.params).json()
+        res = requests.get(url, params=self.redlist_params).json()
         return res["result"]
 
     def get_scientific_name(self, species):
@@ -40,7 +41,7 @@ class RedList():
         :param species: a 6-letter eBird code for a bird species.
         :return: the scientific name of the bird species.
         """
-        return get_taxonomy(EBIRD_KEY, species=species)[0]["sciName"]
+        return get_taxonomy(self.ebird_key, species=species)[0]["sciName"]
 
     def get_habitats(self, name, region=None):
         """
@@ -75,7 +76,7 @@ class HabitatGenerator(object):
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
 
-    def __init__(self, terrain_path, terrain_codes_path, crs, resolution=None, resampling="near"):
+    def __init__(self, terrain_path, terrain_codes_path, crs=None, resolution=None, resampling="near", bounds=None, padding=0, force_new_terrain_codes=False):
         """
         Initializes a HabitatGenerator object.
 
@@ -84,12 +85,15 @@ class HabitatGenerator(object):
         :param crs: desired common CRS of the layers as an ESRI WKT string.
         :param resolution: desired resolution of the layers in the units of the CRS as an integer.
         :param resampling: resampling method if resampling is necessary to produce layers with the desired CRS and/or resolution.
+        :param force_new_terrain_codes: if set to True, forcefully generates a new CSV of the terrain map codes. This will overwrite any existing CSV.
         """
         self.terrain_path = terrain_path
         self.terrain_codes_path = terrain_codes_path
         self.crs = crs
         self.resolution = resolution
         self.resampling = resampling
+        self.bounds = bounds
+        self.padding = padding
 
         # rio_resampling accounts for rasterio's different resampling parameter names from gdal
         if self.resampling == "near":
@@ -98,31 +102,48 @@ class HabitatGenerator(object):
             self.rio_resampling = "cubic_spline"
         else:
             self.rio_resampling = self.resampling
+        
+        # reproject/crop terrain if needed
+        self.reproject_terrain()
+        if bounds is not None:
+            self.crop_terrain(bounds, padding)
+
+        # generate map codes CSV if terrain has been modified or force_new_terrain_codes is set to True
+        if self.terrain_path != terrain_path or force_new_terrain_codes:
+            self.write_map_codes()
 
     def reproject_terrain(self):
         """
-        Reprojects the terrain to the CRS and resolution desired using the chosen resampling method, creating a new file in doing so.
-        terrain_path is assigned to the path of this new file.
-        The CRS, resolution, and resampling method are taken from the current class instance's settings.
+        Reprojects the terrain to the CRS and resolution desired if needed, creating a new file in doing so.
+        terrain_path is reassigned to the path of this new file.
+        The CRS and resolution are taken from the current class instance's settings if specified.
+        If reprojection occurs, the resampling method used is taken from the current class instance.
         """
         with GeoTiff.from_file(self.terrain_path) as ter:
-            # reproject terrain if resolution is set and not equal to current terrain resolution
-            # or if the CRS is not the same
-            if (self.resolution is not None and self.resolution != ter.dataset.transform[0]) or ter.dataset.crs != self.crs:
+            if self.crs is None:
+                self.crs = ter.dataset.crs
+            if self.resolution is None:
+                self.resolution = int(ter.dataset.transform[0])
+            
+            # reproject terrain if resolution and/or CRS attributes differ from current resolution and CRS
+            if self.resolution != int(ter.dataset.transform[0]) or self.crs != ter.dataset.crs:
                 reproj_terrain_path = self.append_settings_to_name(self.terrain_path)
                 ter.reproject_from_crs(reproj_terrain_path, self.crs, (self.resolution, self.resolution), self.rio_resampling)
                 self.terrain_path = reproj_terrain_path
-            else:
-                self.resolution = int(ter.dataset.transform[0])
 
     def crop_terrain(self, bounds, padding=0):
         """
         Crops the terrain to a certain bounding rectangle with optional padding.
         This does not modify the existing file, but creates a new one that terrain_path is assigned to.
 
-        :param bounds: bounds to crop the terrain layer, specified as a bounding box (xmin, ymin, xmax, ymax).
+        :param bounds: bounds to crop the terrain layer to, specified as a bounding box (xmin, ymin, xmax, ymax).
         :param padding: padding to add around the bounds in the units of the current CRS.
         """
+        if not isinstance(bounds, tuple):
+            raise TypeError("Bounds should be given as a tuple")
+        if len(bounds) != 4:
+            raise ValueError("Invalid bounding box")
+
         with GeoTiff.from_file(self.terrain_path) as file:
             cropped_terrain_path = self.terrain_path[:-4] + "_cropped.tif"
             cropped_file = file.crop_to_new_file(cropped_terrain_path, bounds=bounds, padding=padding)
@@ -134,6 +155,9 @@ class HabitatGenerator(object):
         Obtains the list of unique terrain map codes from terrain_codes_path, if the file path exists.
         This is used to determine the map codes for which resistance values need to be defined.
         """
+        if not os.path.isfile(self.terrain_codes_path):
+            raise FileNotFoundError("Terrain codes file not found, generate with write_map_codes")
+
         all_map_codes = []
         with open(self.terrain_codes_path, newline="") as ter_codes:
             for row in csv.reader(ter_codes):
@@ -169,7 +193,12 @@ class HabitatGenerator(object):
         :param species_list_path: list of species to download range map shapefiles for, given as 6-letter eBird codes.
         :param species_range_folder: folder to which the downloaded range maps should be saved.
         """
-        result = subprocess.run(["R", "./ebird_range_download.R", species_list_path, species_range_folder], capture_output=True, text=True)
+        if not os.path.exists(species_range_folder):
+            os.makedirs(species_range_folder)
+
+        downloader_path = os.path.join(os.path.dirname(__file__), "ebird_range_download.R")
+        result = subprocess.run(["Rscript", downloader_path, species_list_path, species_range_folder], capture_output=True, text=True)
+
         if result.returncode != 0:
             print(result)
             raise AssertionError("Problem occurred while downloading ranges")
@@ -182,7 +211,7 @@ class HabitatGenerator(object):
         - All other terrains are assigned a resistance of 1.
 
         :param habitats: IUCN Red List habitat data for the species for which the table should be generated.
-        :param map_codes: list of all map codes to assign resistances to; obtainable from get_map_codes(), provided that terrain_codes_path exists.
+        :param map_codes: list of map codes to assign resistances to.
         :param output_path: path of CSV file to which the species' resistance table should be saved.
         """
         with open(output_path, "w", newline="") as csvfile:
