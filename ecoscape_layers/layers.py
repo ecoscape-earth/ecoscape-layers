@@ -70,7 +70,7 @@ class RedList():
         return habs
 
 
-class HabitatGenerator(object):
+class LayerGenerator(object):
     """
     For things like reprojecting, building resistance tables, and creating habitat layers and matrix (terrain) layers.
     This class maintains a common CRS, resolution, and resampling method for this purpose.
@@ -268,7 +268,7 @@ class HabitatGenerator(object):
         This decides what terrain map codes should be used to filter the habitat.
 
         :param habitats: IUCN Red List habitat data for the species for which suitable terrain is computed.
-        :param refine_method: method by which habitat pixels should be selected. See documentation for detailed descriptions of each option.
+        :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         :return: list of terrain map codes filtered by refine_method.
         """
 
