@@ -1,7 +1,7 @@
 import os
 from scgt import GeoTiff
-from layers import RedList, HabitatGenerator, reproject_shapefile
-from constants import HAB_308
+from layers import RedList, LayerGenerator, reproject_shapefile
+from constants import EBIRD_INDIV_RANGE_PATH, EBIRD_INDIV_RANGE_LAYER
 
 
 def generate_layers(species_list_path, terrain_path, terrain_codes_path, species_range_folder, output_folder,
@@ -24,121 +24,82 @@ def generate_layers(species_list_path, terrain_path, terrain_codes_path, species
     :param force_new_terrain_codes: If set to True, forcefully generates a new CSV of the terrain map codes, potentially overwriting any previously existing CSV.
     """
 
-    # If CRS not specified, inherit CRS of terrain geotiff
-    if crs is None:
-        with GeoTiff.from_file(terrain_path) as ter:
-            crs = ter.crs
+    # eBird-specific range map path and gpkg layer
+    indiv_range_path = os.path.join(species_range_folder, EBIRD_INDIV_RANGE_PATH)
+    indiv_range_layer = EBIRD_INDIV_RANGE_LAYER
 
-    if species_range_folder is None:
-        # Specify eBird range file locations if no input ranges folder is specified
-        species_range_folder = os.path.join(output_folder, "ebird_ranges")
-        if not os.path.exists(species_range_folder):
-            os.makedirs(species_range_folder)
-        indiv_range_path = os.path.join(species_range_folder, "/2020/{code}/ranges/{code}_range_smooth_mr_2020.gpkg")
-        indiv_range_layer = "range"
-    else:
-        # If given by user instead, assume the range paths by speches from given folder.
-        # Should change later
-        assert os.path.isdir(species_range_folder), "invalid species_range_folder"
-        indiv_range_path = os.path.join(species_range_folder, "/{code}/range.gpkg")
-        indiv_range_layer = "range"
-
-    # Get the list of bird species from species_list_path
+    # get the list of bird species from species_list_path
     with open(species_list_path) as file:
         species_list = file.read().splitlines()
 
-    terrain_path = os.path.abspath(terrain_path)
-    terrain_codes_path = os.path.abspath(terrain_codes_path)
-
-    # Generate species output folders
+    # generate species output folders
     for species in species_list:
         species_output_folder = os.path.join(output_folder, species)
         if not os.path.exists(species_output_folder):
             os.makedirs(species_output_folder)
-
-    # Create species output folder if it doesn't currently exist
-    if not os.path.exists(species_output_folder):
-        os.makedirs(species_output_folder)
-
-    redlist = RedList()
-    habitat_generator = HabitatGenerator(
-        terrain_path=terrain_path,
-        terrain_codes_path=terrain_codes_path,
-        crs=crs,
-        resolution=resolution,
-        resampling=resampling,
-    )
-
-    # Crop terrain if bounds are specified
-    if bounds is not None:
-        habitat_generator.crop_terrain(bounds=bounds, padding=padding)
-    habitat_generator.write_map_codes()
-
+    
+    redlist = RedList(REDLIST_KEY, EBIRD_KEY)
+    layer_generator = LayerGenerator(terrain_path, terrain_codes_path, crs, resolution, resampling,
+                                        bounds, padding, force_new_terrain_codes)
+    
     # Obtain species habitat information from the IUCN Red List.
     species_data = []
+
     for species in species_list:
         sci_name = redlist.get_scientific_name(species)
-        # When eBird's scientific name differs from that on Red List, we manually correct it here
-        if species == "whhwoo":
-            sci_name = "Leuconotopicus albolarvatus"
-        if species == "yebmag":
-            sci_name = "Pica nutalli"
-            
         habs = redlist.get_habitats(sci_name)
-
-        # report if ebird scientific name didn't map to IUCN name
-        if len(habs) == 0:
-            print(f"{species} info could not be found on IUCN Red List due to an uncaught name \
-                    mismatch with eBird. Please report to Ecoscape for assistance")
-            continue
         
-        data = {
-            "name": species,
-            "sci_name": sci_name,
-            "habitats": habs
-        }
-        species_data.append(data)
+        if len(habs) == 0:
+            print("Skipping", species, "due to not finding info on IUCN Red List (perhaps a name mismatch with eBird)?")
+            continue
+        else:
+            species_data.append({
+                "name": species,
+                "sci_name": sci_name,
+                "habitats": habs
+            })
 
-    # Download species ranges as shapefiles from eBird.
-    if species_range_folder:
-        habitat_generator.get_ranges_from_ebird(species_list_path, species_range_folder)
+    # Download species ranges as shapefiles from eBird, depending on the specified range source.
+    layer_generator.get_ranges_from_ebird(species_list_path, species_range_folder)
 
     # Create the resistance table for each species.
-    all_map_codes = habitat_generator.get_map_codes()
+    all_map_codes = layer_generator.get_map_codes()
     for species in species_data:
         code = species["name"]
-        resistance_output_path = os.path.join(output_folder, code, "resistance.csv")
-        habitat_generator.generate_resistance_table(species["habitats"], all_map_codes, resistance_output_path)
+        resistance_output_path = os.path.join(output_folder, code, f"{code}_resistance.csv")
+        layer_generator.generate_resistance_table(species["habitats"], all_map_codes, resistance_output_path)
 
-    # Perform the intersection between the range and habitable terrain.
-    with GeoTiff.from_file(habitat_generator.terrain_path) as ter:
-        # In case resolution was initially marked as None
+    # Perform the intersection between the range, habitable elevation, and habitable terrain.
+    with GeoTiff.from_file(layer_generator.terrain_path) as ter:
+        # just for output file names
         resolution = int(ter.dataset.transform[0])
         
         for i, species in enumerate(species_data):
-            if not os.path.isfile(indiv_range_path.format(code=species["name"])):
-                print("{num}. Skipping {code}, no associated indiv_range_path found".format(num=i+1, code=species["name"]))
-                continue
-
-            print("{num}. Refining {code}".format(num=i+1, code=species["name"]))
+            if species == "":
+                break
 
             code = species["name"]
+            habitats = species["habitats"]
 
-            # Load the range shapes for the given species, and put them into the correct CRS
+            if not os.path.isfile(indiv_range_path.format(code=code)):
+                print("{num}. Skipping {code}, no associated indiv_range_path found".format(num=i+1, code=code))
+                continue
+
+            print("{num}. Refining {code}".format(num=i+1, code=code))
+
             range_shapes = reproject_shapefile(
                 shapes_path=indiv_range_path.format(code=code),
                 dest_crs=crs,
                 shapes_layer=indiv_range_layer
             )
 
-            # Depending on the length of range_shapes, determine if this is a seasonal bird.
             if len(range_shapes) == 1:
-                # Not a seasonal bird
+                # not a seasonal bird
                 path = os.path.join(output_folder, code, f"habitat_2020_{resolution}_{resampling}_{refine_method}.tif")
-                habitat_generator.refine_habitat(ter=ter, species=species, shapes=range_shapes[0], output_path=path, refine_method=refine_method)
+                layer_generator.refine_habitat(ter, habitats=habitats, shapes=range_shapes[0], output_path=path, refine_method=refine_method)
             else:
-                # Seasonal bird, different output for each shape
+                # seasonal bird, different output for each shape
                 for s in range_shapes:
                     season = str(s["properties"]["season"])
                     path = os.path.join(output_folder, code, f"{season}_habitat_2020_{resolution}_{resampling}_{refine_method}.tif")
-                    habitat_generator.refine_habitat(ter=ter, species=species, shapes=s, output_path=path, refine_method=refine_method)
+                    layer_generator.refine_habitat(ter, habitats=habitats, shapes=s, output_path=path, refine_method=refine_method)

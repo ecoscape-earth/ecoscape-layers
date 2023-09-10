@@ -6,22 +6,25 @@ from layers_runner import generate_layers
 def main(args):
     output_folder = os.getcwd()
 
-    print(f"Generating layers with parameters:\n\t\
-            species_list {args.species_list}\n\t\
-            terrain {args.terrain}\n\t\
-            terrain_codes {args.terrain_codes}\n\t\
-            species_range_folder {args.species_range_folder}\n\t\
-            output_folder {output_folder}\n\t\
-            crs {args.crs}\n\t\
-            resolution {args.resolution}\n\t\
-            resampling {args.resampling}\n\t\
-            bounds {args.bounds}\n\t\
-            padding {args.padding}\n\t\
-            refine_method {args.refine_method}\n\t\
-            force_new_terrain_codes {args.force_new_terrain_codes}\n\t\
+    print(f"Generating layers with parameters:\n\t \
+            config {args.config}\n\t \
+            species_list {args.species_list}\n\t \
+            terrain {args.terrain}\n\t \
+            terrain_codes {args.terrain_codes}\n\t \
+            species_range_folder {args.species_range_folder}\n\t \
+            output_folder {output_folder}\n\t \
+            crs {args.crs}\n\t \
+            resolution {args.resolution}\n\t \
+            resampling {args.resampling}\n\t \
+            bounds {args.bounds}\n\t \
+            padding {args.padding}\n\t \
+            refine_method {args.refine_method}\n\t \
+            force_new_terrain_codes {args.force_new_terrain_codes}\n\t \
                 ")
 
     # validate inputs
+    assert os.path.isfile(args.config), f"config {args.config} is not a valid file"
+
     assert os.path.isfile(args.species_list), f"species_list {args.species_list} is not a valid file"
     assert os.path.isfile(args.terrain), f"terrain {args.terrain} is not a valid file"
     assert os.path.isfile(args.terrain_codes) or os.access(os.path.dirname(args.terrain_codes), os.W_OK), \
@@ -48,21 +51,26 @@ def main(args):
 
     print("ran generate_layers")
 
-if __name__ == '__main__':
-    # main(argparse.Namespace(habitat='/tests/assets/habitat_uint8.tif', terrain='/tests/assets/terrain_uint8.tif', resistance='tests/assets/transmission_refined_0.5.csv', repopulation='./repopulation_uint8.tif', gradient=None, hop_distance=4, num_spreads=400, num_simulations=2, seed_density=4))
-    # main(argparse.Namespace(habitat='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/habitat_float32.tif', terrain='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/terrain_float32.tif', resistance='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/transmission_refined_0.5.csv', repopulation='/Users/nvalett/Documents/Natalie/Species Dist Research/Code/Connectivity-Package/ecoscape/tests/assets/repopulation_float32.tif', gradient=None, hop_distance=4, num_spreads=15, num_simulations=50, batch_size=1, seed_density=4))
-    
-    parser = argparse.ArgumentParser()
 
+def cli():
+    parser = argparse.ArgumentParser()
+    
+    current_dir = os.getcwd()
+    default_terrain_codes = os.path.join(current_dir, "terrain_codes.csv")
+    default_species_range_folder = os.path.join(current_dir, "ebird_ranges.csv")
+
+    parser.add_argument('-k', '--config', type=os.path.abspath, default=None,
+                        help='Path to config.py file containing IUCN Red List and eBird API keys')
+    
     parser.add_argument('-s', '--species_list', type=os.path.abspath, default=None,
                         help='Path to txt file of the bird species for which habitat layers should be generated, formatted as 6-letter eBird species codes on individual lines')
     parser.add_argument('-t', '--terrain', type=os.path.abspath, default=None,
                         help='Path to terrain raster')
-    parser.add_argument('-c', '--terrain_codes', type=os.path.abspath, default=None,
+    parser.add_argument('-c', '--terrain_codes', type=os.path.abspath, default=default_terrain_codes,
                         help='Path to a CSV containing terrain map codes. If it does not yet exist, a CSV based on the final terrain matrix layer will be created at this path')
-    parser.add_argument('-r', '--species_range_folder', type=os.path.abspath, default=None,
+    parser.add_argument('-r', '--species_range_folder', type=os.path.abspath, default=default_species_range_folder,
                         help='Path to folder to which downloaded eBird range maps should be saved')
-    parser.add_argument('-o', '--output_folder', type=os.path.abspath, default=None,
+    parser.add_argument('-o', '--output_folder', type=os.path.abspath, default=current_dir,
                         help='Path to output folder')
     
     parser.add_argument('-C', '--crs', type=str, default=None,
@@ -83,4 +91,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     main(args)
-    
+
+
+if __name__ == '__main__':
+    cli()
