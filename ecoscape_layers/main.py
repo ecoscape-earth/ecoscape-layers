@@ -48,41 +48,47 @@ def main(args):
 
 
 def cli():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(add_help=False)
     
+    required = parser.add_argument_group('required arguments')
+    optional = parser.add_argument_group('optional arguments')
+
     current_dir = os.getcwd()
     default_terrain_codes = os.path.join(current_dir, "terrain_codes.csv")
     default_species_range_folder = os.path.join(current_dir, "ebird_ranges")
     default_outputs = os.path.join(current_dir, "outputs")
 
-    parser.add_argument('-k', '--config', type=os.path.abspath, default=None,
-                        help='Path to config.py file containing IUCN Red List and eBird API keys')
-    
-    parser.add_argument('-s', '--species_list', type=os.path.abspath, default=None,
+    required.add_argument('-c', '--config', type=os.path.abspath, default=None, required=True,
+                        help='Path to Python config file containing IUCN Red List and eBird API keys')
+    required.add_argument('-s', '--species_list', type=os.path.abspath, default=None, required=True,
                         help='Path to txt file of the bird species for which habitat layers should be generated, formatted as 6-letter eBird species codes on individual lines')
-    parser.add_argument('-t', '--terrain', type=os.path.abspath, default=None,
+    required.add_argument('-t', '--terrain', type=os.path.abspath, default=None, required=True,
                         help='Path to terrain raster')
-    parser.add_argument('-c', '--terrain_codes', type=os.path.abspath, default=default_terrain_codes,
+    
+    optional.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS,
+                        help='show this help message and exit')
+
+    optional.add_argument('-T', '--terrain_codes', type=os.path.abspath, default=default_terrain_codes,
                         help='Path to a CSV containing terrain map codes. If it does not yet exist, a CSV based on the final terrain matrix layer will be created at this path')
-    parser.add_argument('-r', '--species_range_folder', type=os.path.abspath, default=default_species_range_folder,
+    optional.add_argument('-r', '--species_range_folder', type=os.path.abspath, default=default_species_range_folder,
                         help='Path to folder to which downloaded eBird range maps should be saved')
-    parser.add_argument('-o', '--output_folder', type=os.path.abspath, default=default_outputs,
+    optional.add_argument('-o', '--output_folder', type=os.path.abspath, default=default_outputs,
                         help='Path to output folder')
     
-    parser.add_argument('-C', '--crs', type=str, default=None,
+    optional.add_argument('-C', '--crs', type=str, default=None,
                         help='Desired common CRS of the outputted layers as an ESRI WKT string, or None to use the CRS of the input terrain raster')
-    parser.add_argument('-R', '--resolution', type=int, default=None,
+    optional.add_argument('-R', '--resolution', type=int, default=None,
                         help='Desired resolution in the units of the chosen CRS, or None to use the resolution of the input terrain raster')
-    parser.add_argument('-e', '--resampling', type=str, default="near",
+    optional.add_argument('-e', '--resampling', type=str, default="near",
                         help='Resampling method to use if reprojection of the input terrain layer is required; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid options')
-    parser.add_argument('-b', '--bounds', nargs=4, type=float, default=None,
+    optional.add_argument('-b', '--bounds', nargs=4, type=float, default=None,
                         help='Four coordinate numbers representing a bounding box (xmin, ymin, xmax, ymax) for the output layers in terms of the chosen CRS')
-    parser.add_argument('-p', '--padding', type=int, default=0,
+    optional.add_argument('-p', '--padding', type=int, default=0,
                         help='Padding to add around the bounds in the units of the chosen CRS')
     
-    parser.add_argument('-m', '--refine_method', type=str, default="forest",
+    optional.add_argument('-m', '--refine_method', type=str, default="forest",
                         help='Method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option')
-    parser.add_argument('-f', '--force_new_terrain_codes', type=bool, default=False,
+    optional.add_argument('-f', '--force_new_terrain_codes', type=bool, default=False,
                         help='If set to True, forcefully generates a new CSV of the terrain map codes, potentially overwriting any previously existing CSV')
 
     args = parser.parse_args()

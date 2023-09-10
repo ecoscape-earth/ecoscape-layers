@@ -1,85 +1,56 @@
-# Bulk preparing habitat and terrain
+# EcoScape Layers
 
-These notebooks demonstrate how to prepare habitat and terrain maps for a given list of bird species. One may download range shapefiles for a specified list of bird species from eBird. These, along with the terrain map, are reprojected to the selected CRS. Then the habitat maps for each species are produced by masking the terrain map with the range shapefiles.
+This package implements the computation of the matrix layer, habitat layers, and terrain-to-resistance mappings that are needed as inputs to the EcoScape algorithm.
 
-## Notebooks
+## Setup
 
-These notebooks provide insight into how to use the RedList and HabitatGenerator modules defined in `habitats.py` to produce habitat and terrain files for a list of species.
+Besides the dependencies outlined in `requirements.txt`, this package relies on an R script to download range maps from eBird. If you would like to download these range maps, ensure that you have R installed first.
+
+In addition, to use the package to its fullest extent, you will need to have API keys for the IUCN Red List and eBird APIs, which are used to obtain various data on bird species:
+
+- A key for the IUCN Red List API is obtainable from http://apiv3.iucnredlist.org/.
+
+- A key for the eBird Status and Trends API is obtainable from https://science.ebird.org/en/status-and-trends/download-data. This access key must also be used to set up the `ebirdst` R package in order to download range maps from eBird. Please consult the Installation and Data Access sections in https://cornelllabofornithology.github.io/ebirdst/index.html for instructions on configuring the R package. EcoScape currently uses version 1.2020.1 of `ebirdst`.
+
+For command line usage, define these keys as variables `REDLIST_KEY` and `EBIRD_KEY` in a Python file which can then be given as an argument. An example configuration file with dummy keys, `sample_config.py`, is provided for reference. For usage as a Python module, simply provide the keys upon initialization of any `RedList` instance.
+
+## Usage
+
+- config 'Path to Python config file containing IUCN Red List and eBird API keys'
+    
+- species_list 'Path to txt file of the bird species for which habitat layers should be generated, formatted as 6-letter eBird species codes on individual lines'
+
+- terrain 'Path to terrain raster'
+
+- terrain_codes 'Path to a CSV containing terrain map codes. If it does not yet exist, a CSV based on the final terrain matrix layer will be created at this path'
+
+--species_range_folder', type=os.path.abspath, default=default_species_range_folder,
+                        help='Path to folder to which downloaded eBird range maps should be saved'
+
+- output_folder 'Path to output folder'
+    
+- crs 'Desired common CRS of the outputted layers as an ESRI WKT string, or None to use the CRS of the input terrain raster'
+
+- resolution 'Desired resolution in the units of the chosen CRS, or None to use the resolution of the input terrain raster'
+
+- resampling 'Resampling method to use if reprojection of the input terrain layer is required; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid options'
+
+- bounds 'Four coordinate numbers representing a bounding box (xmin, ymin, xmax, ymax) for the output layers in terms of the chosen CRS'
+
+- padding 'Padding to add around the bounds in the units of the chosen CRS'
+    
+- refine_method 'Method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option'
+
+- force_new_terrain_codes 'If set to True, forcefully generates a new CSV of the terrain map codes, potentially overwriting any previously existing CSV'
+
+## Examples
+
+See the `tests` directory for example Jupyter notebooks that use the package to create habitat and matrix layers.
 
 - test_run.ipynb: notebook for basic testing of module functionality on a small square of terrain
 
 - ca_birds_habitats.ipynb: notebook for generating terrain and habitats for bird species in California
 
-## Preparation
-
-You will need to have R and an access key for the `ebirdst` R package in order to run this. Refer to the Installation and Data Access sections in https://cornelllabofornithology.github.io/ebirdst/index.html for instructions on setting this up.
-
-You will also need to have a `birdmaps/config.py` file defining the constants `EBIRD_KEY` and `REDLIST_KEY`. This is necessary to download bird species ranges and obtain necessary information about birds. For UCSC researchers, keys are available in the shared drive:
-
-- https://drive.google.com/drive/u/0/folders/1dMdx0zlitb5N2i1GHFtv49tFFxQiHg2X
-- https://drive.google.com/drive/u/0/folders/132Aas6w6LKdsOEPaKagPNZT9-wLlZq4j
-
-## Parameters
-
-File paths:
-
-- species_list_path
-    - Path to txt file of the bird species to download eBird ranges for
-    - Inputs are 6-letter eBird species codes on individual lines
-
-- terrain_path
-    - Path to terrain raster
-
-- terrain_codes_path
-    - Output path to a terrain codes csv containing all unique values in the terrain
-    - If not generated, it can be generated by setting reproject_inputs to True
-
-- output_folder
-    - Folder to place habitat output files and terrain-to-resistance csv files in
-
-Other configuration settings:
-
-- resolution
-    - Resolution in the units of the chosen CRS
-    - Set to None to just use the current resolution of the terrain raster
-
-- resampling
-    - Type of resampling to use when reprojecting the input tiffs, see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid arguments
-
-- crs
-    - Chosen CRS to reproject all input files to, as a WKT string
-
-- bounds, padding
-    - (xmin/left, ymin/bottom, xmax/right, ymax/top) to crop habitats to and padding in units of chosen CRS to add around the bounds
-    - Set bounds to None if you don't want to crop
-
-- refine_method
-    - Choose what terrain should be considered as good for habitat:
-        - forest (default, all forest terrains)
-        - forest_add308 (forest terrains plus the terrain with map code 308: "Shrubland – Mediterranean-type shrubby vegetation")
-        - allsuitable (all terrains deemed suitable for the relevant species by the IUCN Red List)
-        - majoronly (all terrains deemed of major importance for the relevant species by the IUCN Red List)
-
-- reproject_inputs
-    - Set reproject_inputs to True to reproject terrain if necessary
-    - Produces new terrain file with provided resolution/resampling/CRS setting and terrain_codes_path file that can be swapped in as inputs in future runs, in which case this can be set to false
-
-## Methods
-
-The main input files are the terrain geotiff and the list of bird species to generate habitats for. The list of bird species should be given as a text file containing the relevant eBird 6-letter codes on separate lines. FIll in each of the parameters explained above as necessary.
-
-If you've never used the terrain geotiff with the specific set of resolution, resampling mode, CRS, and bounds/padding before, you should set reproject_inputs to true. This produces a new terrain that is added to the same folder location as the original input files and which can be reused in future runs with reproject_inputs set to false. The advantage of this setup is that since you may find yourself using the same settings and source input file for multiple runs, time does not need to be spent reprojecting the same terrain input on every run.
-
-A small amount of setup is done before the real processing happens. We do some checks for the parameters, checking that they seem reasonable and that the specified files and folders exist. The species list to process is read into a list of species codes for later use, including making species folders inside the main output folder. One may also want to sometimes use these codes in other file names, such as for species-specific shapefiles or outputs.
-
-Data about each species' preferred terrain types is then collected from the IUCN Red List API. For cases in which the eBird name differs from that on the IUCN Red List, manually corrections might need to be specified in this step.
-
-Range shapefiles for each bird species will be downloaded from eBird into the input folders. These range maps serve to outline initial rough boundaries of the birds' habitats.
-
-A default terrain-to-resistance conversion file is generated in which terrains deemed both suitable and of major importance have a resistance of 0, suitable ones have a resistance of 0.1, and all others within the terrain extent have a resistance of 1. This is outputted as a csv in the species' specific output folder.
-
-Lastly, the intersection between the range shapefile and habitable terrain is performed for each bird species. The habitable terrain depends on refine_method; it can be terrain of major importance only, for instance, or it may just be the general forest terrain. Like the terrain-to-resistance files, these are outputted in the species' specific output folder.
-
 ## Known issues
 
-- The eBird and IUCN Redlist scientific names don't always match up for certain bird species (like white-headed woodpecker). The IUCN Redlist API only accepts scientific names for queries, so the species code for the white-headed woodpecker from eBird has to be manually matched to the corresponding entry in the IUCN Redlist.
+- The eBird and IUCN Redlist scientific names do not agree for certain bird species, like the white-headed woodpecker. As the IUCN Redlist API only accepts scientific names for its API queries, if this occurs for a bird species, the 6-letter eBird species code for the species must be manually matched to the corresponding scientific name from the IUCN Redlist.
