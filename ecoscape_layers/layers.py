@@ -76,7 +76,7 @@ class LayerGenerator(object):
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
 
-    def __init__(self, terrain_path, terrain_codes_path, crs=None, resolution=None, resampling="near", bounds=None, padding=0, force_new_terrain_codes=False):
+    def __init__(self, terrain_path, terrain_codes_path, crs=None, resolution=None, resampling="near", bounds=None, padding=0):
         """
         Initializes a HabitatGenerator object.
 
@@ -85,8 +85,8 @@ class LayerGenerator(object):
         :param crs: desired common CRS of the layers as an ESRI WKT string.
         :param resolution: desired resolution of the layers in the units of the CRS as an integer.
         :param resampling: resampling method if resampling is necessary to produce layers with the desired CRS and/or resolution.
-        :param force_new_terrain_codes: if set to True, forcefully generates a new CSV of the terrain map codes. This will overwrite any existing CSV.
         """
+        self.orig_terrain_path = terrain_path
         self.terrain_path = terrain_path
         self.terrain_codes_path = terrain_codes_path
         self.crs = crs
@@ -102,15 +102,24 @@ class LayerGenerator(object):
             self.rio_resampling = "cubic_spline"
         else:
             self.rio_resampling = self.resampling
-        
+
+    def generate_terrain(self):
+        """
+        Generates the terrain layer based on the paramters specified at initialization.
+        If no reprojection or cropping is needed, it may not be necessary to generate a new layer file.
+        If generation was already done before, then repeated generations start from the original file
+        rather than any new ones that were created.
+        """
+
+        if self.orig_terrain_path != self.terrain_path:
+            print("A new terrain layer has already been generated before. Generation will proceed with the original terrain that was inputted on initialization, which may overwrite any previously generated terrain layers.")
+            self.terrain_path = self.orig_terrain_path
+
         # reproject/crop terrain if needed
         self.reproject_terrain()
-        if bounds is not None:
-            self.crop_terrain(bounds, padding)
-
-        # generate map codes CSV if terrain has been modified or force_new_terrain_codes is set to True
-        if self.terrain_path != terrain_path or force_new_terrain_codes:
-            self.write_map_codes()
+        if self.bounds is not None:
+            self.crop_terrain()
+        self.write_map_codes()
 
     def reproject_terrain(self):
         """
@@ -131,22 +140,19 @@ class LayerGenerator(object):
                 ter.reproject_from_crs(reproj_terrain_path, self.crs, (self.resolution, self.resolution), self.rio_resampling)
                 self.terrain_path = reproj_terrain_path
 
-    def crop_terrain(self, bounds, padding=0):
+    def crop_terrain(self):
         """
-        Crops the terrain to a certain bounding rectangle with optional padding.
+        Crops the terrain to the desired bounding rectangle with optional padding.
         This does not modify the existing file, but creates a new one that terrain_path is assigned to.
-
-        :param bounds: bounds to crop the terrain layer to, specified as a bounding box (xmin, ymin, xmax, ymax).
-        :param padding: padding to add around the bounds in the units of the current CRS.
         """
-        if not isinstance(bounds, tuple):
+        if not isinstance(self.bounds, tuple):
             raise TypeError("Bounds should be given as a tuple")
-        if len(bounds) != 4:
+        if len(self.bounds) != 4:
             raise ValueError("Invalid bounding box")
 
         with GeoTiff.from_file(self.terrain_path) as file:
             cropped_terrain_path = self.terrain_path[:-4] + "_cropped.tif"
-            cropped_file = file.crop_to_new_file(cropped_terrain_path, bounds=bounds, padding=padding)
+            cropped_file = file.crop_to_new_file(cropped_terrain_path, bounds=self.bounds, padding=self.padding)
             cropped_file.dataset.close()
             self.terrain_path = cropped_terrain_path
 

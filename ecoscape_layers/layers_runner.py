@@ -8,7 +8,7 @@ from constants import EBIRD_INDIV_RANGE_PATH, EBIRD_INDIV_RANGE_LAYER
 
 def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_path, species_range_folder,
                     output_folder, crs=None, resolution=None, resampling="near", bounds=None, padding=0,
-                    refine_method="forest", force_new_terrain_codes=False):
+                    refine_method="forest"):
     """
     Runner function for habitat generation.
 
@@ -24,10 +24,9 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
     :param bounds: bounds to crop generated layers to in the units of the chosen CRS, specified as a bounding box (xmin, ymin, xmax, ymax).
     :param padding: padding in units of chosen CRS to add around the bounds.
     :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
-    :param force_new_terrain_codes: If set to True, forcefully generates a new CSV of the terrain map codes, potentially overwriting any previously existing CSV.
     """
 
-    # Get API keys from config.py file
+    # Get API keys from config.py file.
     config_spec = importlib.util.spec_from_file_location("config", config_path)
     config = importlib.util.module_from_spec(config_spec)
     sys.modules["module.name"] = config
@@ -35,8 +34,6 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
 
     REDLIST_KEY = config.REDLIST_KEY
     EBIRD_KEY = config.EBIRD_KEY
-    
-    crs = crs.replace("'", '"')
 
     # Define eBird-specific range map path and gpkg layer.
     indiv_range_path = os.path.join(species_range_folder, EBIRD_INDIV_RANGE_PATH)
@@ -58,15 +55,28 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
     
     redlist = RedList(REDLIST_KEY, EBIRD_KEY)
     layer_generator = LayerGenerator(terrain_path, terrain_codes_path, crs, resolution, resampling,
-                                        bounds, padding, force_new_terrain_codes)
+                                        bounds, padding)
+
+    # Generate terrain layer.
+    print("Generating terrain layer...")
+    layer_generator.generate_terrain()
     
     # Obtain species habitat information from the IUCN Red List.
+    print("Gathering species habitat preferences...")
     species_data = []
 
     for species in species_list:
         sci_name = redlist.get_scientific_name(species)
         habs = redlist.get_habitats(sci_name)
-        
+
+        # Manual corrections for differences between eBird and IUCN Red List scientific names.
+        if species == "whhwoo":
+            sci_name = "Leuconotopicus albolarvatus"
+            habs = redlist.get_habitats(sci_name)
+        if species == "yebmag":
+            sci_name = "Pica nutalli"
+            habs = redlist.get_habitats(sci_name)
+
         if len(habs) == 0:
             print("Skipping", species, "due to not finding info on IUCN Red List (perhaps a name mismatch with eBird)?")
             continue
@@ -78,21 +88,23 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
             })
 
     # Download species ranges as shapefiles from eBird.
+    print("Downloading species range maps...")
     layer_generator.get_ranges_from_ebird(species_list_path, species_range_folder)
 
     # Create the resistance table for each species.
+    print("Creating resistance CSVs...")
     all_map_codes = layer_generator.get_map_codes()
     for species in species_data:
         code = species["name"]
         resistance_output_path = os.path.join(output_folder, code, f"{code}_resistance.csv")
         layer_generator.generate_resistance_table(species["habitats"], all_map_codes, resistance_output_path)
 
-    # Perform the intersection between the range, habitable elevation, and habitable terrain.
+    # Perform the intersection between the range and habitable terrain.
+    print("Generating habitat layers...")
     with GeoTiff.from_file(layer_generator.terrain_path) as ter:
-        # just for output file names
         resolution = int(ter.dataset.transform[0])
         
-        for i, species in enumerate(species_data):
+        for species in species_data:
             if species == "":
                 break
 
@@ -100,10 +112,8 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
             habitats = species["habitats"]
 
             if not os.path.isfile(indiv_range_path.format(code=code)):
-                print("{num}. Skipping {code}, no associated indiv_range_path found".format(num=i+1, code=code))
+                print("Skipping {code}, no associated range map found".format(code=code))
                 continue
-
-            print("{num}. Refining {code}".format(num=i+1, code=code))
 
             range_shapes = reproject_shapefile(
                 shapes_path=indiv_range_path.format(code=code),
@@ -121,3 +131,5 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
                     season = str(s["properties"]["season"])
                     path = os.path.join(output_folder, code, f"{season}_habitat_2020_{resolution}_{resampling}_{refine_method}.tif")
                     layer_generator.refine_habitat(ter, habitats=habitats, shapes=s, output_path=path, refine_method=refine_method)
+    
+    print("Layers successfully generated in " + output_folder)

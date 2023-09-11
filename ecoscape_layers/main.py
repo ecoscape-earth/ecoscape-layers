@@ -40,11 +40,11 @@ def main(args):
     
     assert args.refine_method in REFINE_METHODS, \
         f"{args.resampling} is not a valid refine method. Value must be in {REFINE_METHODS}"
-    assert isinstance(args.force_new_terrain_codes, bool), f"force_new_terrain_codes is not a boolean value"
 
+    print()
     generate_layers(args.config, args.species_list, args.terrain, args.terrain_codes,
-                    args.species_range_folder, args.output_folder, args.crs, args.resolution, args.resampling,
-                    tuple(args.bounds), args.padding, args.refine_method, args.force_new_terrain_codes)
+                    args.species_range_folder, args.output_folder, args.crs.replace("'", '"'),
+                    args.resolution, args.resampling, tuple(args.bounds), args.padding, args.refine_method)
 
 
 def cli():
@@ -63,7 +63,7 @@ def cli():
     required.add_argument('-s', '--species_list', type=os.path.abspath, default=None, required=True,
                         help='Path to txt file of the bird species for which habitat layers should be generated, formatted as 6-letter eBird species codes on individual lines')
     required.add_argument('-t', '--terrain', type=os.path.abspath, default=None, required=True,
-                        help='Path to terrain raster')
+                        help='Path to initial terrain raster')
     
     optional.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS,
                         help='show this help message and exit')
@@ -88,8 +88,6 @@ def cli():
     
     optional.add_argument('-m', '--refine_method', type=str, default="forest",
                         help='Method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option')
-    optional.add_argument('-f', '--force_new_terrain_codes', type=bool, default=False,
-                        help='If set to True, forcefully generates a new CSV of the terrain map codes, potentially overwriting any previously existing CSV')
 
     args = parser.parse_args()
     main(args)

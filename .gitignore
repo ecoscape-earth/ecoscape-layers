@@ -1,7 +1,7 @@
-ecoscape_layers/__pycache__/
+dist/*
+*/__pycache__/*
 inputs/*
 outputs/*
-tests/__pycache__/
 tests/inputs/*
 tests/outputs/*
 tests/config.py
