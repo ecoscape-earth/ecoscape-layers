@@ -197,7 +197,7 @@ class LayerGenerator(object):
     def get_ranges_from_ebird(self, species_list_path, species_range_folder):
         """
         Downloads range map shapefiles from eBird by using the ebirdst R package.
-        This utilizes the R script "ebird_range_download.R" to download the ranges.
+        This utilizes the R script "ebird_range_download.r" to download the ranges.
         An API key for eBird is required; see the documentation for more information.
 
         :param species_list_path: list of species to download range map shapefiles for, given as 6-letter eBird codes.
@@ -206,7 +206,7 @@ class LayerGenerator(object):
         if not os.path.exists(species_range_folder):
             os.makedirs(species_range_folder)
 
-        downloader_path = os.path.join(os.path.dirname(__file__), "ebird_range_download.R")
+        downloader_path = os.path.join(os.path.dirname(__file__), "ebird_range_download.r")
         result = subprocess.run(["Rscript", downloader_path, species_list_path, species_range_folder], capture_output=True, text=True)
 
         if result.returncode != 0:

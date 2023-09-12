@@ -7,5 +7,5 @@ tests/inputs/*
 tests/outputs/*
 tests/config.py
 
-!tests/inputs/species_list.txt
+!tests/inputs/test_species_list.txt
 !tests/inputs/test_terrain.tif
