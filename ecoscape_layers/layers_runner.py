@@ -2,8 +2,8 @@ import importlib.util
 import os
 import sys
 from scgt import GeoTiff
-from layers import RedList, LayerGenerator, reproject_shapefile
-from constants import EBIRD_INDIV_RANGE_PATH, EBIRD_INDIV_RANGE_LAYER
+from ecoscape_layers.layers import RedList, LayerGenerator, reproject_shapefile
+from ecoscape_layers.constants import EBIRD_INDIV_RANGE_PATH, EBIRD_INDIV_RANGE_LAYER
 
 
 def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_path, species_range_folder,
