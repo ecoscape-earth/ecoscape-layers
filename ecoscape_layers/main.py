@@ -1,7 +1,8 @@
 import argparse
 import os
 from ecoscape_layers.constants import RESAMPLING_METHODS, REFINE_METHODS
-from ecoscape_layers.layers_runner import generate_layers
+from ecoscape_layers.layers import generate_layers
+
 
 def main(args):
     # print(f"\nGenerating layers with parameters:\n\t \

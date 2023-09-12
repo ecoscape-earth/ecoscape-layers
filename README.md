@@ -22,7 +22,7 @@ This package can be used on the command line or as a Python module.
 
 For the command line, view argument options with `ecoscape_layers --help`.
 
-For use as a module, there is a general runner function `generate_layers` in `layers_runner.py` that can be used. For more control over the generation process, `layers.py` provides code for the various classes and functions used by `generate_layers`. Illustrative notebook examples of using these classes and functions can be found in the `tests` directory.
+For use as a module, there is a main function `generate_layers` in `layers.py` that can be used for generating layers. `layers.py` also includes the code for the various classes and functions used by `generate_layers`.
 
 ### Arguments
 
@@ -58,14 +58,6 @@ Optional:
     - `forest_add308`: selects all forest pixels and pixels with code "308" (Shrubland – Mediterranean-type shrubby vegetation).
     - `allsuitable`: selects all terrain deemed suitable for the species, as determined by the IUCN Red List.
     - `majoronly`: selects all terrain deemed of major importance to the species, as determined by the IUCN Red List.
-
-## Examples
-
-See the `tests` directory for example Jupyter notebooks that use the package to create layers.
-
-- `test_run.ipynb`: a simple example for two bird species performed in a small section of California.
-
-- `ca_birds_habitats.ipynb`: code for reproducing the EcoScape input habitat and matrix layers.
 
 ## Known issues
 
