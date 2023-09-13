@@ -69,11 +69,11 @@ def cli():
     optional.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS,
                         help='show this help message and exit')
 
-    optional.add_argument('-T', '--terrain_codes', type=os.path.abspath, default=default_terrain_codes,
+    optional.add_argument('-T', '--terrain_codes', type=os.path.abspath, default=None,
                         help='Path to a CSV containing terrain map codes. If it does not yet exist, a CSV based on the final terrain matrix layer will be created at this path')
-    optional.add_argument('-r', '--species_range_folder', type=os.path.abspath, default=default_species_range_folder,
+    optional.add_argument('-r', '--species_range_folder', type=os.path.abspath, default=None,
                         help='Path to folder to which downloaded eBird range maps should be saved')
-    optional.add_argument('-o', '--output_folder', type=os.path.abspath, default=default_outputs,
+    optional.add_argument('-o', '--output_folder', type=os.path.abspath, default=None,
                         help='Path to output folder')
     
     optional.add_argument('-C', '--crs', type=str, default=None,

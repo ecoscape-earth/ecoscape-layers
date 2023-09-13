@@ -123,7 +123,8 @@ class LayerGenerator(object):
         self.reproject_terrain()
         if self.bounds is not None:
             self.crop_terrain()
-        self.write_map_codes()
+        if self.orig_terrain_path != self.terrain_path or not os.path.exists(self.terrain_codes_path):
+            self.write_map_codes()
 
     def reproject_terrain(self):
         """
@@ -343,9 +344,8 @@ def reproject_shapefile(shapes_path, dest_crs, shapes_layer=None, file_path=None
 
     return myfeatures
 
-def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_path, species_range_folder,
-                    output_folder, crs=None, resolution=None, resampling="near", bounds=None, padding=0,
-                    refine_method="forest"):
+def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_path=None,
+                    species_range_folder=None, output_folder=None, crs=None, resolution=None, resampling="near", bounds=None, padding=0, refine_method="forest"):
     """
     Runner function for full process of habitat and matrix layer generation.
 
@@ -372,6 +372,15 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
     REDLIST_KEY = config.REDLIST_KEY
     EBIRD_KEY = config.EBIRD_KEY
 
+    # Define some default output files and directories.
+    current_dir = os.getcwd()
+    if terrain_codes_path is None:
+        terrain_codes_path = os.path.join(current_dir, "terrain_codes.csv")
+    if species_range_folder is None:
+        species_range_folder = os.path.join(current_dir, "ebird_ranges")
+    if output_folder is None:
+        output_folder = os.path.join(current_dir, "outputs")
+
     # Define eBird-specific range map path and gpkg layer.
     indiv_range_path = os.path.join(species_range_folder, EBIRD_INDIV_RANGE_PATH)
     indiv_range_layer = EBIRD_INDIV_RANGE_LAYER
@@ -390,6 +399,7 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
         if not os.path.exists(species_output_folder):
             os.makedirs(species_output_folder)
     
+    # Initialize RedList and LayerGenerator instances.
     redlist = RedList(REDLIST_KEY, EBIRD_KEY)
     layer_generator = LayerGenerator(terrain_path, terrain_codes_path, crs, resolution, resampling,
                                         bounds, padding)
@@ -440,6 +450,7 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
     print("Generating habitat layers...")
     with GeoTiff.from_file(layer_generator.terrain_path) as ter:
         resolution = int(ter.dataset.transform[0])
+        resampling = layer_generator.resampling
 
         for species in species_data:
             if species == "":
@@ -453,7 +464,7 @@ def generate_layers(config_path, species_list_path, terrain_path, terrain_codes_
 
             range_shapes = reproject_shapefile(
                 shapes_path=indiv_range_path.format(code=code),
-                dest_crs=crs,
+                dest_crs=layer_generator.crs,
                 shapes_layer=indiv_range_layer
             )
 
