@@ -1,6 +1,6 @@
 # EcoScape Layers
 
-This package implements the computation of the landscape matrix (terrain) layer, habitat layers, and landcover-to-resistance mappings that are needed as inputs to the EcoScape algorithm.
+This package implements the computation of the landscape matrix layer, habitat layers, and landcover-to-resistance mappings that are needed as inputs to the EcoScape algorithm.
 
 ## Setup
 
@@ -35,22 +35,18 @@ Required:
 
 - `species_list`: path to txt file of the bird species for which habitat layers should be generated, formatted as 6-letter eBird species codes on individual lines.
 
-- `terrain`: path to initial landcover raster.
+- `landcover`: path to initial landcover raster.
 
 Optional:
 
-- `terrain_codes`: path to a CSV containing landcover type codes. If it does not yet exist, a CSV based on the final landscapeerrain matrix layer will be created at this path.
-
-- `species_range_folder`: path to folder to which downloaded eBird range maps should be saved.
-
 - `output_folder`: path to output folder.
     
-- `crs`: desired common CRS of the outputted layers as an ESRI WKT string, or None to use the CRS of the input terrain raster.
+- `crs`: desired common CRS of the outputted layers as an ESRI WKT string, or None to use the CRS of the input landcover raster.
     - <b>Note</b>: if the ESRI WKT string contains double quotes that are ignored when the string is given as a command line argument, use single quotes in place of double quotes.
 
-- `resolution`: desired resolution in the units of the chosen CRS, or None to use the resolution of the input terrain raster.
+- `resolution`: desired resolution in the units of the chosen CRS, or None to use the resolution of the input landcover raster.
 
-- `resampling`: resampling method to use if reprojection of the input terrain layer is required; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid options.
+- `resampling`: resampling method to use if reprojection of the input landcover layer is required; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid options.
 
 - `bounds`: four coordinate numbers representing a bounding box (xmin, ymin, xmax, ymax) for the output layers in terms of the chosen CRS.
 
@@ -59,8 +55,8 @@ Optional:
 - `refine_method`: method by which habitat pixels should be selected when creating a habitat layer.
     - `forest`: selects all forest pixels.
     - `forest_add308`: selects all forest pixels and pixels with code "308" (Shrubland – Mediterranean-type shrubby vegetation).
-    - `allsuitable`: selects all terrain deemed suitable for the species, as determined by the IUCN Red List.
-    - `majoronly`: selects all terrain deemed of major importance to the species, as determined by the IUCN Red List.
+    - `allsuitable`: selects all pixels with landcover deemed suitable for the species, as determined by the IUCN Red List.
+    - `majoronly`: selects all pixels with landcover deemed of major importance to the species, as determined by the IUCN Red List.
 
 ## Known issues
 
