@@ -6,7 +6,8 @@ from ecoscape_layers.layers import generate_layers
 
 def main(args):
     # print(f"\nGenerating layers with parameters:\n\t \
-    #         config {args.config}\n\t \
+    #         redlist {args.redlist}\n\t \
+    #         ebird {args.ebird}\n\t \
     #         species_list {args.species_list}\n\t \
     #         terrain {args.terrain}\n\t \
     #         terrain_codes {args.terrain_codes}\n\t \
@@ -22,8 +23,6 @@ def main(args):
     #             ")
 
     # validate inputs
-    assert os.path.isfile(args.config), f"config {args.config} is not a valid file"
-
     assert os.path.isfile(args.species_list), f"species_list {args.species_list} is not a valid file"
     assert os.path.isfile(args.terrain), f"terrain {args.terrain} is not a valid file"
     assert os.path.isfile(args.terrain_codes) or os.access(os.path.dirname(args.terrain_codes), os.W_OK), \
@@ -43,7 +42,7 @@ def main(args):
         f"{args.resampling} is not a valid refine method. Value must be in {REFINE_METHODS}"
 
     print()
-    generate_layers(args.config, args.species_list, args.terrain, args.terrain_codes,
+    generate_layers(args.redlist, args.ebird, args.species_list, args.terrain, args.terrain_codes,
                     args.species_range_folder, args.output_folder, args.crs.replace("'", '"'),
                     args.resolution, args.resampling, tuple(args.bounds), args.padding, args.refine_method)
 
@@ -54,13 +53,10 @@ def cli():
     required = parser.add_argument_group('required arguments')
     optional = parser.add_argument_group('optional arguments')
 
-    current_dir = os.getcwd()
-    default_terrain_codes = os.path.join(current_dir, "terrain_codes.csv")
-    default_species_range_folder = os.path.join(current_dir, "ebird_ranges")
-    default_outputs = os.path.join(current_dir, "outputs")
-
-    required.add_argument('-c', '--config', type=os.path.abspath, default=None, required=True,
-                        help='Path to Python config file containing IUCN Red List and eBird API keys')
+    required.add_argument('-k', '--redlist', type=str, default=None, required=True,
+                        help='IUCN Red List API key')
+    required.add_argument('-K', '--ebird', type=str, default=None, required=True,
+                        help='eBird API key')
     required.add_argument('-s', '--species_list', type=os.path.abspath, default=None, required=True,
                         help='Path to txt file of the bird species for which habitat layers should be generated, formatted as 6-letter eBird species codes on individual lines')
     required.add_argument('-t', '--terrain', type=os.path.abspath, default=None, required=True,

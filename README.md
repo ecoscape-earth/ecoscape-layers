@@ -12,8 +12,6 @@ In addition, to use the package to its fullest extent, you will need to have API
 
 - A key for the eBird Status and Trends API is obtainable from https://science.ebird.org/en/status-and-trends/download-data. This access key must also be used to set up the `ebirdst` R package in order to download range maps from eBird. Please consult the Installation and Data Access sections in https://cornelllabofornithology.github.io/ebirdst/index.html for instructions on configuring the R package. EcoScape currently uses version 1.2020.1 of `ebirdst`.
 
-For command line usage, define these keys as variables `REDLIST_KEY` and `EBIRD_KEY` in a Python file which can then be given as an argument. An example configuration file with dummy keys, `sample_config.py`, is provided for reference. For usage as a Python module, simply provide the keys upon initialization of any `RedList` instance.
-
 The initial terrain raster that we use to produce our layers originates from a global map produced by [Jung et al.](https://doi.org/10.1038/s41597-020-00599-8) and is available for download at https://zenodo.org/record/4058819 (iucn_habitatclassification_composite_lvl2_ver004.zip). It follows the [IUCN Red List Habitat Classification Scheme](https://www.iucnredlist.org/resources/habitat-classification-scheme).
 <!-- Since this raster is quite large, it is advisable to crop to the rough area of study rather than letting the package process the entire global landcover. We begin with a raster cropped to the United States. -->
 
@@ -29,7 +27,9 @@ For use as a module, there is a main function `generate_layers` in `layers.py` t
 
 Required:
 
-- `config`: path to Python config file containing IUCN Red List and eBird API keys.
+- `redlist`: IUCN Red List API key.
+
+- `ebird`: eBird API key.
 
 - `species_list`: path to txt file of the bird species for which habitat layers should be generated, formatted as 6-letter eBird species codes on individual lines.
 
