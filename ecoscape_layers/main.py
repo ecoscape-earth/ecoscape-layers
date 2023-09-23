@@ -1,7 +1,7 @@
 import argparse
 import os
-from layers import LayerGenerator
-from constants import RESAMPLING_METHODS, REFINE_METHODS
+from .layers import LayerGenerator
+from .constants import RESAMPLING_METHODS, REFINE_METHODS
 
 
 def main(args):
