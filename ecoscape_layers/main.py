@@ -1,36 +1,12 @@
 import argparse
 import os
-from ecoscape_layers.constants import RESAMPLING_METHODS, REFINE_METHODS
-from ecoscape_layers.layers import generate_layers
+from layers import LayerGenerator
+from constants import RESAMPLING_METHODS, REFINE_METHODS
 
 
 def main(args):
-    # print(f"\nGenerating layers with parameters:\n\t \
-    #         redlist {args.redlist}\n\t \
-    #         ebird {args.ebird}\n\t \
-    #         species_list {args.species_list}\n\t \
-    #         terrain {args.terrain}\n\t \
-    #         terrain_codes {args.terrain_codes}\n\t \
-    #         species_range_folder {args.species_range_folder}\n\t \
-    #         output_folder {output_folder}\n\t \
-    #         crs {args.crs}\n\t \
-    #         resolution {args.resolution}\n\t \
-    #         resampling {args.resampling}\n\t \
-    #         bounds {args.bounds}\n\t \
-    #         padding {args.padding}\n\t \
-    #         refine_method {args.refine_method}\n\t \
-    #         force_new_terrain_codes {args.force_new_terrain_codes}\n\t \
-    #             ")
-
-    # validate inputs
-    assert os.path.isfile(args.species_list), f"species_list {args.species_list} is not a valid file"
-    assert os.path.isfile(args.terrain), f"terrain {args.terrain} is not a valid file"
-    assert os.path.isfile(args.terrain_codes) or os.access(os.path.dirname(args.terrain_codes), os.W_OK), \
-        f"output_folder {args.terrain_codes} is not a valid directory"
-    assert os.path.isdir(args.species_range_folder) or \
-        os.access(os.path.dirname(args.species_range_folder), os.W_OK), \
-        f"species_range_folder {args.species_range_folder} is not a valid directory"
-    assert os.path.isdir(args.output_folder), f"output_folder {args.output_folder} is not a valid directory"
+    # validate some inputs
+    assert os.path.isfile(args.landcover_path), f"landcover {args.landcover_path} is not a valid file"
 
     assert args.resolution == None or isinstance(args.resolution, int), "invalid resolution"
     assert args.resampling in RESAMPLING_METHODS, \
@@ -42,9 +18,10 @@ def main(args):
         f"{args.resampling} is not a valid refine method. Value must be in {REFINE_METHODS}"
 
     print()
-    generate_layers(args.redlist, args.ebird, args.species_list, args.terrain, args.terrain_codes,
-                    args.species_range_folder, args.output_folder, args.crs.replace("'", '"'),
-                    args.resolution, args.resampling, tuple(args.bounds), args.padding, args.refine_method)
+
+    layer_generator = LayerGenerator(args.redlist_key, args.ebird_key, args.landcover_path, args.crs.replace("'", '"'), args.resolution, args.resampling, tuple(args.bounds), args.padding)
+    layer_generator.process_landcover()
+    layer_generator.generate_habitat(args.species_code, args.habitat_fn, args.resistance_dict_fn, args.range_fn, args.refine_method)
 
 
 def cli():
@@ -53,26 +30,26 @@ def cli():
     required = parser.add_argument_group('required arguments')
     optional = parser.add_argument_group('optional arguments')
 
-    required.add_argument('-k', '--redlist', type=str, default=None, required=True,
+    required.add_argument('-k', '--redlist_key', type=str, default=None, required=True,
                         help='IUCN Red List API key')
-    required.add_argument('-K', '--ebird', type=str, default=None, required=True,
+    required.add_argument('-K', '--ebird_key', type=str, default=None, required=True,
                         help='eBird API key')
-    required.add_argument('-s', '--species_list', type=os.path.abspath, default=None, required=True,
-                        help='Path to txt file of the bird species for which habitat layers should be generated, formatted as 6-letter eBird species codes on individual lines')
-    required.add_argument('-t', '--terrain', type=os.path.abspath, default=None, required=True,
-                        help='Path to initial terrain raster')
+    required.add_argument('-s', '--species_code', type=str, default=None, required=True,
+                        help='Bird species for which habitat layer and landcover matrix layer should be generated as a 6-letter eBird code')
+    required.add_argument('-l', '--landcover_path', type=os.path.abspath, default=None, required=True,
+                        help='Path to initial landcover matrix raster')
     
     optional.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS,
                         help='show this help message and exit')
 
-    optional.add_argument('-T', '--terrain_codes', type=os.path.abspath, default=None,
-                        help='Path to a CSV containing terrain map codes. If it does not yet exist, a CSV based on the final terrain matrix layer will be created at this path')
-    optional.add_argument('-r', '--species_range_folder', type=os.path.abspath, default=None,
-                        help='Path to folder to which downloaded eBird range maps should be saved')
-    optional.add_argument('-o', '--output_folder', type=os.path.abspath, default=None,
-                        help='Path to output folder')
+    optional.add_argument('-H', '--habitat_fn', type=os.path.abspath, default=None,
+                        help='Path to outputted habitat layer')
+    optional.add_argument('-d', '--resistance_dict_fn', type=os.path.abspath, default=None,
+                        help='Path to outputted resistance dictionary CSV')
+    optional.add_argument('-r', '--range_fn', type=os.path.abspath, default=None,
+                        help='Path to outputted range map')
     
-    optional.add_argument('-C', '--crs', type=str, default=None,
+    optional.add_argument('-c', '--crs', type=str, default=None,
                         help='Desired common CRS of the outputted layers as an ESRI WKT string, or None to use the CRS of the input terrain raster')
     optional.add_argument('-R', '--resolution', type=int, default=None,
                         help='Desired resolution in the units of the chosen CRS, or None to use the resolution of the input terrain raster')

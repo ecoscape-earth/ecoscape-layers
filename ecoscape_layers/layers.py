@@ -6,10 +6,9 @@ import requests
 from ebird.api import get_taxonomy
 from pyproj import Transformer
 from rasterio import features
-from rasterio.windows import Window
+from rasterio.windows import Window, from_bounds, bounds
 from scgt import GeoTiff
 from shapely.geometry import shape
-from ecoscape_layers.constants import EBIRD_INDIV_RANGE_PATH, EBIRD_INDIV_RANGE_LAYER
 
 
 class RedList():
@@ -92,8 +91,7 @@ class LayerGenerator(object):
         :param bounds: bounds to crop generated layers to in the units of the chosen CRS, specified as a bounding box (xmin, ymin, xmax, ymax).
         :param padding: padding in units of chosen CRS to add around the bounds.
         """
-        self.orig_landcover_path = os.path.abspath(landcover_path)
-        self.landcover_path = self.orig_landcover_path
+        self.landcover_path = os.path.abspath(landcover_path)
         self.redlist = RedList(redlist_key, ebird_key)
         self.ebird_key = ebird_key
         self.crs = crs
@@ -114,23 +112,17 @@ class LayerGenerator(object):
         """
         Processes the landcover layer based on the parameters specified at initialization.
         If no reprojection or cropping is needed, it may not be necessary to generate a new layer file.
-        If generation was already done before, then repeated generations start from the original file
-        rather than any new ones that were created.
         """
-
-        if self.orig_landcover_path != self.landcover_path:
-            print("The landcover layer has been processed before. Generation will proceed with the original landcover that was inputted on initialization, which may overwrite any previously generated landcover layers.")
-            self.landcover_path = self.orig_landcover_path
+        self.orig_landcover_path = self.landcover_path
 
         # reproject/crop landcover if needed
         self.reproject_landcover()
-        if self.bounds is not None:
-            self.crop_landcover()
+        self.crop_landcover()
         
         if self.orig_landcover_path != self.landcover_path:
             print("New landcover in", self.landcover_path)
         else:
-            print("Landcover already meets the desired parameters")
+            print("Landcover already meets the desired parameters, no reprojection or cropping needed")
 
     def reproject_landcover(self):
         """
@@ -147,8 +139,7 @@ class LayerGenerator(object):
             
             # reproject landcover if resolution and/or CRS attributes differ from current resolution and CRS
             if self.resolution != int(ter.dataset.transform[0]) or self.crs != ter.dataset.crs:
-                sep = self.landcover_path.index(".")
-                reproj_landcover_path = self.landcover_path[:sep] + "_" + str(self.resolution) + "_" + self.resampling + self.landcover_path[sep:]
+                reproj_landcover_path = self.landcover_path[:-4] + "_" + str(self.resolution) + "_" + self.resampling + ".tif"
                 ter.reproject_from_crs(reproj_landcover_path, self.crs, (self.resolution, self.resolution), self.rio_resampling)
 
                 self.landcover_path = reproj_landcover_path
@@ -158,16 +149,25 @@ class LayerGenerator(object):
         Crops the landcover to the desired bounding rectangle with optional padding.
         This does not modify the existing file, but creates a new one that landcover_path is assigned to.
         """
+        if self.bounds is None:
+            return
         if not isinstance(self.bounds, tuple):
-            raise TypeError("Bounds should be given as a tuple")
+            raise TypeError("Bounds should be given as a tuple of 4 coordinates")
         if len(self.bounds) != 4:
-            raise ValueError("Invalid bounding box")
+            raise ValueError("Invalid bounding box, bounds should have 4 coordinates")
 
         with GeoTiff.from_file(self.landcover_path) as file:
-            cropped_landcover_path = self.landcover_path[:-4] + "_cropped.tif"
-            cropped_file = file.crop_to_new_file(cropped_landcover_path, bounds=self.bounds, padding=self.padding)
-            cropped_file.dataset.close()
-            self.landcover_path = cropped_landcover_path
+            # check that file is not already cropped to the bounds (rounded by window lengths/offsets)
+            padded_bounds = (self.bounds[0] - self.padding, self.bounds[1] - self.padding, self.bounds[2] + self.padding, self.bounds[3] + self.padding)
+            cropped_window = from_bounds(*padded_bounds, transform=file.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
+            crop_bounds = bounds(cropped_window, file.dataset.transform)
+
+            if crop_bounds != file.dataset.bounds:
+                # perform the cropping operation if needed
+                cropped_landcover_path = self.landcover_path[:-4] + "_cropped.tif"
+                cropped_file = file.crop_to_new_file(cropped_landcover_path, bounds=self.bounds, padding=self.padding)
+                cropped_file.dataset.close()
+                self.landcover_path = cropped_landcover_path
 
     def get_map_codes(self):
         """
@@ -212,19 +212,6 @@ class LayerGenerator(object):
                 else:
                     writer.writerow([''] * 5 + [map_code] + [1])
 
-    def refine_habitat(self, landcover, habitats, shapes, output_path, refine_method="forest"):
-        """
-        Creates the habitat layer for a given species based on the landcover layer and range map.
-
-        :param landcover: open instance of the landcover GeoTiff.
-        :param habitats: IUCN Red List habitat data for the species for which the habitat layer should be generated.
-        :param shapes: list of shapes to use as the range map, given in the same projection as the landcover.
-        :param output_path: file path to save the habitat layer to.
-        :param refine_method: used to decide what terrain within the landcover map should be considered for habitat.
-        """
-
-
-
     def get_good_terrain(self, habitats, refine_method="forest_add308"):
         """
         Determine the terrain deemed suitable for habitat based on the refining method.
@@ -250,9 +237,9 @@ class LayerGenerator(object):
         Runner function for full process of habitat and matrix layer generation for one bird species.
 
         :param species_code: 6-letter eBird code of the bird speciess to generate layers for.
-        :param crs: desired common CRS of the layers as an ESRI WKT string.
-        :param resolution: desired resolution in the units of the chosen CRS, or None to use the resolution of the input terrain raster.
-        :param resampling: resampling method if resampling is necessary to produce layers with the desired CRS and/or resolution; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid arguments.
+        :param habitat_fn: name of output habitat layer.
+        :param resistance_dict_fn: name of output resistance dictionary CSV.
+        :param range_fn: name of output range map for the species, which is downloaded as an intermediate step for producing the habitat layer.
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         """
 
@@ -279,6 +266,16 @@ class LayerGenerator(object):
             sci_name = self.redlist.get_scientific_name(species_code)
         
         habs = self.redlist.get_habitats(sci_name)
+        if refine_method == "forest_add308" and len([hab for hab in habs if hab["code"] == "3.8"]) == 0:
+            habs.append({
+                "code": "3.8",
+                "habitat": "Shrubland - Mediterranean-type shrubby vegetation",
+                "suitability": "Suitable",
+                "season": "Resident",
+                "majorimportance": "Yes",
+                "map_code": 308,
+                "resistance": 0
+            })
 
         if len(habs) == 0:
             print("Habitat preferences for", species_code, "could not be found on the IUCN Red List (perhaps due to a name mismatch with eBird?). Habitat layer and resistance dictionary were not generated.")
@@ -321,7 +318,7 @@ class LayerGenerator(object):
                 if os.path.isfile(habitat_fn + ".aux.xml"):
                     os.remove(habitat_fn + ".aux.xml")
         
-        print("Layers successfully generated for", species_code)
+        print("Habitat layer successfully generated for", species_code)
 
 def reproject_shapefile(shapes_path, dest_crs, shapes_layer=None, file_path=None):
     """
