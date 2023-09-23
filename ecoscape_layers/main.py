@@ -17,7 +17,7 @@ def main(args):
     assert args.refine_method in REFINE_METHODS, \
         f"{args.resampling} is not a valid refine method. Value must be in {REFINE_METHODS}"
 
-    print()
+    print(len((args.redlist_key, args.ebird_key, args.landcover_path, args.crs.replace("'", '"'), args.resolution, args.resampling, tuple(args.bounds), args.padding)))
 
     layer_generator = LayerGenerator(args.redlist_key, args.ebird_key, args.landcover_path, args.crs.replace("'", '"'), args.resolution, args.resampling, tuple(args.bounds), args.padding)
     layer_generator.process_landcover()
