@@ -10,6 +10,8 @@ from rasterio.windows import Window, from_bounds, bounds
 from scgt import GeoTiff
 from shapely.geometry import shape
 
+from .constants import REFINE_METHODS
+
 
 class RedList():
     """
@@ -78,7 +80,7 @@ class LayerGenerator(object):
     """
 
     def __init__(self, redlist_key, ebird_key, landcover_path, crs=None, resolution=None, resampling="near",
-                 bounds=None, padding=0):
+                 bounds=None, padding=0, out_landcover_path=None):
         """
         Initializes a LayerGenerator object.
 
@@ -90,6 +92,7 @@ class LayerGenerator(object):
         :param resampling: resampling method if resampling is necessary to produce layers with the desired CRS and/or resolution.
         :param bounds: bounds to crop generated layers to in the units of the chosen CRS, specified as a bounding box (xmin, ymin, xmax, ymax).
         :param padding: padding in units of chosen CRS to add around the bounds.
+        :param out_landcover_path: file path to save new landcover to if a new one is produced by cropping/reprojection/rescaling. If not given, one can be generated based on the parameters applied.
         """
         self.landcover_path = os.path.abspath(landcover_path)
         self.redlist = RedList(redlist_key, ebird_key)
@@ -107,6 +110,8 @@ class LayerGenerator(object):
             self.rio_resampling = "cubic_spline"
         else:
             self.rio_resampling = self.resampling
+        
+        self.out_landcover_path = os.path.abspath(out_landcover_path) if out_landcover_path else None
 
     def process_landcover(self):
         """
@@ -120,6 +125,12 @@ class LayerGenerator(object):
         self.crop_landcover()
         
         if self.orig_landcover_path != self.landcover_path:
+            # if a specific output landcover path was specified, rename the processed file to that
+            if self.out_landcover_path:
+                os.replace(self.landcover_path, self.out_landcover_path)
+                if os.path.isfile(self.landcover_path + ".aux.xml"):
+                    os.replace(self.landcover_path + ".aux.xml", self.out_landcover_path + ".aux.xml")
+                self.landcover_path = self.out_landcover_path
             print("New landcover in", self.landcover_path)
         else:
             print("Landcover already meets the desired parameters, no reprojection or cropping needed")
@@ -186,7 +197,7 @@ class LayerGenerator(object):
         :param species_code: 6-letter eBird code for a bird species.
         :param output_path: path to write the range map to.
         """
-        req_url = f"https://st-download.ebird.org/v1/fetch?objKey=2020/{species_code}/ranges/{species_code}_range_smooth_mr_2020.gpkg&key={self.ebird_key}"
+        req_url = f"https://st-download.ebird.org/v1/fetch?objKey=2022/{species_code}/ranges/{species_code}_range_smooth_9km_2022.gpkg&key={self.ebird_key}"
         res = requests.get(req_url)
         with open(output_path, "wb") as res_file:
             res_file.write(res.content)
@@ -232,7 +243,7 @@ class LayerGenerator(object):
             return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
     
     def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None, range_fn=None,
-                        refine_method="forest"):
+                        refine_method="forest", refine_list=None):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
 
@@ -241,7 +252,13 @@ class LayerGenerator(object):
         :param resistance_dict_fn: name of output resistance dictionary CSV.
         :param range_fn: name of output range map for the species, which is downloaded as an intermediate step for producing the habitat layer.
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
+        :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
         """
+
+        if refine_list:
+            refine_method = None
+        elif refine_method not in REFINE_METHODS:
+            refine_method = "forest"
 
         # If file names not specified, build default ones.
         if habitat_fn is None:
@@ -294,7 +311,7 @@ class LayerGenerator(object):
         with GeoTiff.from_file(self.landcover_path) as landcover:
             range_shapes = reproject_shapefile(range_fn, self.crs, "range")
             shapes_for_mask = [shape(range_shapes[0]["geometry"])]
-            good_terrain_for_hab = self.get_good_terrain(habs, refine_method)
+            good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
             with landcover.clone_shape(habitat_fn) as output:
                 reader = output.get_reader(b=0, w=10000, h=10000)
