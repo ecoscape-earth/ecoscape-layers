@@ -10,8 +10,7 @@ from rasterio.windows import Window, from_bounds, bounds
 from scgt import GeoTiff
 from shapely.geometry import shape
 from osgeo import gdal, ogr
-
-from .constants import REFINE_METHODS
+from .constants import HAB_308, REFINE_METHODS
 
 
 class RedList():
@@ -37,17 +36,23 @@ class RedList():
         res = requests.get(url, params=self.redlist_params).json()
         return res["result"]
 
-    def get_scientific_name(self, species):
+    def get_scientific_name(self, species_code):
         """
         Translates eBird codes to scientific names for use in Red List.
 
-        :param species: 6-letter eBird code for a bird species.
+        :param species_code: 6-letter eBird code for a bird species.
         :return: the scientific name of the bird species.
         """
-        res = get_taxonomy(self.ebird_key, species=species)
+        # Manual corrections here for differences between eBird and IUCN Red List scientific names.
+        if species_code == "whhwoo":
+            return "Leuconotopicus albolarvatus"
+        elif species_code == "yebmag":
+            return "Pica nutalli"
+
+        res = get_taxonomy(self.ebird_key, species=species_code)
         return res[0]["sciName"] if len(res) > 0 else None
 
-    def get_habitats(self, name, region=None):
+    def get_habitat_data(self, name, region=None):
         """
         Gets habitat assessments for suitability for a given species.
         This also adds the associated landcover map's code and resistance value to the API response, which are useful for creating resistance mappings and/or habitat layers.
@@ -72,6 +77,20 @@ class RedList():
             hab["resistance"] = 0 if hab["majorimportance"] == "Yes" else 0.1
 
         return habs
+
+    def get_elevation(self, name):
+        '''
+        Obtain elevation bounds that are suitable for a given species
+        :param name: scientific name of the species
+        '''
+        url = "https://apiv3.iucnredlist.org/api/v3/species/{0}".format(name)
+        res = self.get_from_redlist(url)
+
+        if len(res) == 0:
+            return None, None
+        else:
+            # if elevation_lower is None, assume -10000; if elevation_upper is None, assume 10000
+            return res[0]["elevation_lower"] or -10000, res[0]["elevation_upper"] or 10000
 
 
 class LayerGenerator(object):
@@ -190,20 +209,6 @@ class LayerGenerator(object):
             tile = landcover.get_all_as_tile()
             map_codes = sorted(list(np.unique(tile.m)))
         return map_codes
-    
-    def get_elevation(self, name):
-        '''
-        Obtain elevation bounds that are suitable for a given species
-        str name: scientific name of the species
-        '''
-        url = "https://apiv3.iucnredlist.org/api/v3/species/{0}".format(name)
-        res = self.get_from_redlist(url)
-
-        if len(res) == 0:
-            return None, None
-        else:
-            # if elevation_lower is None, assume -10000; if elevation_upper is None, assume 10000
-            return res[0]["elevation_lower"] or -10000, res[0]["elevation_upper"] or 10000
     
     def get_range_from_iucn(self, species_data, species_ranges_folder, output_path):
         '''
@@ -332,25 +337,10 @@ class LayerGenerator(object):
         make_dirs_for_file(range_fn)
         
         # Obtain species habitat information from the IUCN Red List.
-        # Manual corrections made here for differences between eBird and IUCN Red List scientific names.
-        if species_code == "whhwoo":
-            sci_name = "Leuconotopicus albolarvatus"
-        elif species_code == "yebmag":
-            sci_name = "Pica nutalli"
-        else:
-            sci_name = self.redlist.get_scientific_name(species_code)
-        
-        habs = self.redlist.get_habitats(sci_name)
+        sci_name = self.redlist.get_scientific_name(species_code)
+        habs = self.redlist.get_habitat_data(sci_name)
         if refine_method == "forest_add308" and len([hab for hab in habs if hab["code"] == "3.8"]) == 0:
-            habs.append({
-                "code": "3.8",
-                "habitat": "Shrubland - Mediterranean-type shrubby vegetation",
-                "suitability": "Suitable",
-                "season": "Resident",
-                "majorimportance": "Yes",
-                "map_code": 308,
-                "resistance": 0
-            })
+            habs.append(HAB_308)
 
         if len(habs) == 0:
             print("Habitat preferences for", species_code, "could not be found on the IUCN Red List (perhaps due to a name mismatch with eBird?). Habitat layer and resistance dictionary were not generated.")
@@ -368,6 +358,17 @@ class LayerGenerator(object):
         # Perform intersection between the range and habitable landcover.
         with GeoTiff.from_file(self.landcover_path) as landcover:
             range_shapes = reproject_shapefile(range_fn, self.crs, "range")
+
+            # TODO: modify logic based on source of range maps.
+            # if range_source == "iucn":
+            #     # correction for polygon coordinates format
+            #     for s in range_shapes:
+            #         if s['geometry']['type'] == 'Polygon':
+            #             s['geometry']['coordinates'] = [[el[0] for el in s['geometry']['coordinates'][0]]]
+            #     shapes_for_mask = [unary_union([shape(s['geometry']) for s in range_shapes])]
+            # else:
+            #     shapes_for_mask = [shape(range_shapes[0]["geometry"])]
+
             shapes_for_mask = [shape(range_shapes[0]["geometry"])]
             good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
@@ -386,7 +387,6 @@ class LayerGenerator(object):
 
                     # get pixels where terrain is good
                     window_data = np.isin(window_data, good_terrain_for_hab)
-
                     output.dataset.write(window_data, window=window)
 
                 # remove old attribute table if it exists so that values can be updated
