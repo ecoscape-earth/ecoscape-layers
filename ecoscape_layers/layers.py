@@ -9,6 +9,7 @@ from rasterio import features
 from rasterio.windows import Window, from_bounds, bounds
 from scgt import GeoTiff
 from shapely.geometry import shape
+from osgeo import gdal, ogr
 
 from .constants import REFINE_METHODS
 
@@ -189,6 +190,63 @@ class LayerGenerator(object):
             tile = landcover.get_all_as_tile()
             map_codes = sorted(list(np.unique(tile.m)))
         return map_codes
+    
+    def get_elevation(self, name):
+        '''
+        Obtain elevation bounds that are suitable for a given species
+        str name: scientific name of the species
+        '''
+        url = "https://apiv3.iucnredlist.org/api/v3/species/{0}".format(name)
+        res = self.get_from_redlist(url)
+
+        if len(res) == 0:
+            return None, None
+        else:
+            # if elevation_lower is None, assume -10000; if elevation_upper is None, assume 10000
+            return res[0]["elevation_lower"] or -10000, res[0]["elevation_upper"] or 10000
+    
+    def get_range_from_iucn(self, species_data, species_ranges_folder, output_path):
+        '''
+        Using IUCN gdb file, creates shapefiles usable for refining ranges for specific species with GDAL's ogr module.
+        :param species_ranges_folder: path to input file (/BOTW.gdb)
+        :param output_path: path for output .shp file (if this path exists already, the old file(s) will be deleted)
+        :param: attr_filter: string to filter input features by according to attribute values
+        '''
+        for species in species_data:
+            # Open input file and layer, and apply attribute filter using scientific name
+            input_src = ogr.Open(species_ranges_folder, 0)
+            input_layer = input_src.GetLayer()
+            input_layer_defn = input_layer.GetLayerDefn()
+            input_layer.SetAttributeFilter("sci_name = '" + species['sci_name'] + "'")
+            input_spatial_ref = input_layer.GetSpatialRef()
+            input_spatial_ref.MorphToESRI()
+
+            # Define output driver, delete old output file(s) if they exist
+            output_driver = ogr.GetDriverByName('ESRI Shapefile')
+            if os.path.exists(output_path):
+                output_driver.DeleteDataSource(output_path)
+            
+            # Create the output shapefile
+            output_src = output_driver.CreateDataSource(output_path)
+            output_layer_name = os.path.splitext(os.path.split(output_path)[1])[0]
+            output_layer = output_src.CreateLayer(output_layer_name, geom_type=ogr.wkbMultiPolygon)
+
+            # Add fields to output
+            for i in range(0, input_layer_defn.GetFieldCount()):
+                output_layer.CreateField(input_layer_defn.GetFieldDefn(i))
+
+            # Add filtered features to output
+            for inFeature in input_layer:
+                output_layer.CreateFeature(inFeature)
+
+            # Create .prj file by taking the projection of the input file
+            output_prj = open(os.path.splitext(output_path)[0] + '.prj', 'w')
+            output_prj.write(input_spatial_ref.ExportToWkt())
+            output_prj.close()
+
+            # Save and close files
+            input_src = None
+            output_src = None
 
     def get_range_from_ebird(self, species_code, output_path):
         """
