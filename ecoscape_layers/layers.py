@@ -279,6 +279,10 @@ class LayerGenerator(object):
             sci_name = "Leuconotopicus albolarvatus"
         elif species_code == "yebmag":
             sci_name = "Pica nutalli"
+        elif species_code == "pilwoo":
+            sci_name = "Hylatomus pileatus"
+        elif species_code == "recwoo":
+            sci_name = "Leuconotopicus borealis"
         else:
             sci_name = self.redlist.get_scientific_name(species_code)
         
@@ -314,6 +318,9 @@ class LayerGenerator(object):
             good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
             with landcover.clone_shape(habitat_fn) as output:
+                # Prevent 0 from being interpreted as a nodata value
+                output.dataset.nodata = -1
+
                 reader = output.get_reader(b=0, w=10000, h=10000)
                 for tile in reader:
                     # get window and fit to the tiff's bounds if necessary
