@@ -202,7 +202,7 @@ class LayerGenerator(object):
         with open(output_path, "wb") as res_file:
             res_file.write(res.content)
 
-    def generate_resistance_table(self, habitats, output_path):
+    def generate_resistance_table(self, habitats, output_path, refine_method):
         """
         Generates the resistance dictionary for a given species as a CSV file using habitat preference data from the IUCN Red List.
         - Major importance terrain is assigned a resistance of 0.
@@ -221,7 +221,10 @@ class LayerGenerator(object):
                 if h is not None:
                     writer.writerow(h.values())
                 else:
-                    writer.writerow([''] * 5 + [map_code] + [1])
+                    if refine_method == "forest" or refine_method == "forest_add308":
+                        writer.writerow([''] * 5 + [map_code] + [0 if map_code >= 100 and map_code < 200 else 1])
+                    else:
+                        writer.writerow([''] * 5 + [map_code] + [1])
 
     def get_good_terrain(self, habitats, refine_method="forest_add308"):
         """
@@ -303,7 +306,7 @@ class LayerGenerator(object):
             return
 
         # Create the resistance table for each species.
-        self.generate_resistance_table(habs, resistance_dict_fn)
+        self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
 
         # Download species range as geopackage from eBird.
         self.get_range_from_ebird(species_code, range_fn)
