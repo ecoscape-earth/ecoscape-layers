@@ -219,6 +219,8 @@ class LayerGenerator(object):
             for map_code in self.get_map_codes():
                 h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
                 if h is not None:
+                    if refine_method == "forest" or refine_method == "forest_add308":
+                        h['resistance'] = 0 if map_code >= 100 and map_code < 200 else h['resistance']
                     writer.writerow(h.values())
                 else:
                     if refine_method == "forest" or refine_method == "forest_add308":
