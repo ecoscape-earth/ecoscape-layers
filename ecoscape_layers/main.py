@@ -1,6 +1,7 @@
 import argparse
 import os
 from .layers import LayerGenerator
+from .utils import warp
 from .constants import RESAMPLING_METHODS, REFINE_METHODS
 
 
@@ -14,12 +15,13 @@ def main(args):
     assert len(args.bounds) == 4, "invalid bounds"
     assert isinstance(args.padding, int), "invalid padding"
     
+    assert args.range_src in ["iucn", "ebird"], "invalid range_src"
     assert args.refine_method in REFINE_METHODS, \
         f"{args.refine_method} is not a valid refine method. Value must be in {REFINE_METHODS}"
 
-    layer_generator = LayerGenerator(args.redlist_key, args.ebird_key, args.landcover_fn, args.crs.replace("'", '"'), args.resolution, args.resampling, tuple(args.bounds), args.padding, args.out_landcover_fn)
-    layer_generator.process_landcover()
-    layer_generator.generate_habitat(args.species_code, args.habitat_fn, args.resistance_dict_fn, args.range_fn, args.refine_method, args.refine_list)
+    warp(args.landcover_fn, args.out_landcover_fn, args.crs.replace("'", '"'), tuple(args.bounds), args.padding, args.resolution, args.resampling)
+    layer_generator = LayerGenerator(args.redlist_key, args.ebird_key, args.landcover_fn)
+    layer_generator.generate_habitat(args.species_code, args.habitat_fn, args.resistance_dict_fn, args.elevation_fn, args.range_fn, args.range_src, args.refine_method, args.refine_list)
 
 
 def cli():
@@ -44,11 +46,15 @@ def cli():
     optional.add_argument('-H', '--habitat_fn', type=os.path.abspath, default=None,
                         help='Path to outputted habitat layer')
     required.add_argument('-L', '--out_landcover_fn', type=os.path.abspath, default=None,
-                        help='Path to outputted landcover matrix layer if a new one is produced by cropping/reprojection/rescaling. If not given, one can be generated from the initial landcover matrix from landcover_fn based on the parameters applied.')
+                        help='Path to outputted landcover matrix layer if a new one is produced by cropping/reprojection/rescaling.')
     optional.add_argument('-d', '--resistance_dict_fn', type=os.path.abspath, default=None,
                         help='Path to outputted resistance dictionary CSV')
+    optional.add_argument('-E', '--elevation_fn', type=os.path.abspath, default=None,
+                        help='Path to optional elevation raster for filtering habitat by elevation')
     optional.add_argument('-r', '--range_fn', type=os.path.abspath, default=None,
                         help='Path to outputted range map')
+    optional.add_argument('-a', '--range_src', type=str, default="ebird",
+                        help='Source to use for range maps ("iucn" or "ebird")')
     
     optional.add_argument('-c', '--crs', type=str, default=None,
                         help='Desired common CRS of the outputted layers as an ESRI WKT string, or None to use the CRS of the input terrain raster')

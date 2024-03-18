@@ -20,37 +20,19 @@ class LayerGenerator(object):
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
 
-    def __init__(self, redlist_key, ebird_key, landcover_path, crs=None, resolution=None, resampling="near",
-                 bounds=None, padding=0, iucn_range_src=None):
+    def __init__(self, redlist_key, ebird_key, landcover_path, iucn_range_src=None):
         """
         Initializes a LayerGenerator object.
 
         :param redlist_key: IUCN Red List API key.
         :param ebird_key: eBird API key.
         :param landcover_path: file path to the initial landcover raster.
-        :param crs: desired common CRS of the layers as an ESRI WKT string.
-        :param resolution: desired resolution of the layers in the units of the CRS as an integer.
-        :param resampling: resampling method if resampling is necessary to produce layers with the desired CRS and/or resolution.
-        :param bounds: bounds to crop generated layers to in the units of the chosen CRS, specified as a bounding box (xmin, ymin, xmax, ymax).
-        :param padding: padding in units of chosen CRS to add around the bounds.
+        :param iucn_range_src: file path to the IUCN range source if wanted.
         """
         self.landcover_path = os.path.abspath(landcover_path)
         self.redlist = RedList(redlist_key, ebird_key)
         self.ebird_key = ebird_key
-        self.crs = crs
-        self.resolution = resolution
-        self.resampling = resampling
-        self.bounds = bounds
-        self.padding = padding
         self.iucn_range_src = iucn_range_src
-
-        # rio_resampling accounts for rasterio's different resampling parameter names from gdal
-        if self.resampling == "near":
-            self.rio_resampling = "nearest"
-        elif self.resampling == "cubicspline":
-            self.rio_resampling = "cubic_spline"
-        else:
-            self.rio_resampling = self.resampling
 
     def get_map_codes(self):
         """
@@ -65,9 +47,10 @@ class LayerGenerator(object):
     def get_range_from_iucn(self, species_name, input_ranges_gdb, output_path):
         '''
         Using IUCN gdb file, creates shapefiles usable for refining ranges for specific species with GDAL's ogr module.
+
+        :param species_name: scientific name of species to obtain range for.
         :param input_ranges_gdb: path to input file (/BOTW.gdb)
-        :param output_path: path for output .shp file (if this path exists already, the old file(s) will be deleted)
-        :param: attr_filter: string to filter input features by according to attribute values
+        :param output_path: path for output .shp file (if exists already, the old file(s) will be deleted)
         '''
         # We want to set this option to avoid spending too much time organizing polygons.
         # See https://gdal.org/api/ogrgeometry_cpp.html#_CPPv4N18OGRGeometryFactory16organizePolygonsEPP11OGRGeometryiPiPPKc
@@ -109,6 +92,7 @@ class LayerGenerator(object):
         input_src = None
         output_src = None
 
+        # Reset the GDAL config option
         gdal.SetConfigOption('OGR_ORGANIZE_POLYGONS', 'DEFAULT')
 
     def get_range_from_ebird(self, species_code, output_path):
@@ -120,8 +104,9 @@ class LayerGenerator(object):
         """
         req_url = f"https://st-download.ebird.org/v1/fetch?objKey=2022/{species_code}/ranges/{species_code}_range_smooth_9km_2022.gpkg&key={self.ebird_key}"
         res = requests.get(req_url)
-        with open(output_path, "wb") as res_file:
-            res_file.write(res.content)
+        if res.status_code == 200:
+            with open(output_path, "wb") as res_file:
+                res_file.write(res.content)
 
     def generate_resistance_table(self, habitats, output_path):
         """
@@ -171,7 +156,9 @@ class LayerGenerator(object):
         :param species_code: 6-letter eBird code of the bird speciess to generate layers for.
         :param habitat_fn: name of output habitat layer.
         :param resistance_dict_fn: name of output resistance dictionary CSV.
+        :param elevation_fn: name of input elevation raster for filtering habitat by elevation.
         :param range_fn: name of output range map for the species, which is downloaded as an intermediate step for producing the habitat layer.
+        :param range_src: source from which to obtain range maps; "ebird" or "iucn".
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
         """
@@ -202,33 +189,28 @@ class LayerGenerator(object):
             habs.append(HAB_308)
 
         if len(habs) == 0:
-            print("Habitat preferences for", species_code, "could not be found on the IUCN Red List (perhaps due to a name mismatch with eBird?). Habitat layer and resistance dictionary were not generated.")
-            return
+            raise AssertionError("Habitat preferences for " + str(species_code) + " could not be found on the IUCN Red List (perhaps due to a name mismatch with eBird?). Habitat layer and resistance dictionary were not generated.")
 
         # Create the resistance table for the species.
         self.generate_resistance_table(habs, resistance_dict_fn)
 
-        # Download species range as geopackage from eBird.
-        if range_src == "ebird":
-            self.get_range_from_ebird(species_code, range_fn)
-        else:
+        # Obtain species range as either shapefile from IUCN or geopackage from eBird.
+        if range_src == "iucn":
             if self.iucn_range_src is None:
-                print("No IUCN range source was specified. Habitat layer was not generated.")
-                return
+                raise ValueError("No IUCN range source was specified. Habitat layer was not generated.")
             self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
+        else:
+            self.get_range_from_ebird(species_code, range_fn)
 
         if not os.path.isfile(range_fn):
-            print("A range map could not be downloaded for", species_code, ". Habitat layer was not generated.")
-            return
-        
-        min_elev, max_elev = self.redlist.get_elevation(sci_name)
+            raise FileNotFoundError("Range map could not be found for " + str(species_code) + " from " + ("IUCN" if range_src == "iucn" else "eBird") + ". Habitat layer was not generated.")
 
         # Perform intersection between the range and habitable landcover.
         with GeoTiff.from_file(self.landcover_path) as landcover:
             _, ext = os.path.splitext(range_fn)
-            range_shapes = reproject_shapefile(range_fn, self.crs, "range" if ext == ".gpkg" else None)
+            range_shapes = reproject_shapefile(range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None)
 
-            # TODO: modify logic based on source of range maps.
+            # Prepare range defined as shapes for masking
             if range_src == "iucn":
                 # correction for polygon coordinates format
                 for s in range_shapes:
@@ -238,34 +220,50 @@ class LayerGenerator(object):
             else:
                 shapes_for_mask = [shape(range_shapes[0]["geometry"])]
 
+            # Define map codes for which corresponding pixels should be considered habitat
             good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
-            with GeoTiff.from_file(elevation_fn) as elev:
-                with landcover.clone_shape(habitat_fn) as output:
+            # Create the habitat layer
+            with landcover.clone_shape(habitat_fn) as output:
+                # If elevation raster is provided, obtain min/max elevation and read elevation raster
+                if elevation_fn is not None:
+                    min_elev, max_elev = self.redlist.get_elevation(sci_name)
+                    elev = GeoTiff.from_file(elevation_fn)
                     cropped_window = from_bounds(*output.dataset.bounds, transform=elev.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
                     x_offset, y_offset = cropped_window.col_off, cropped_window.row_off
-                    reader = output.get_reader(b=0, w=10000, h=10000)
-                    
-                    for tile in reader:
-                        # get window and fit to the tiff's bounds if necessary
-                        tile.fit_to_bounds(width=output.width, height=output.height)
-                        window = Window(tile.x, tile.y, tile.w, tile.h)
+                
+                output.dataset.nodata = None
+                reader = output.get_reader(b=0, w=10000, h=10000)
+                
+                for tile in reader:
+                    # get window and fit to the tiff's bounds if necessary
+                    tile.fit_to_bounds(width=output.width, height=output.height)
+                    window = Window(tile.x, tile.y, tile.w, tile.h)
+
+                    # mask out pixels from landcover not within range of shapes
+                    window_data = landcover.dataset.read(window=window, masked=True)
+                    shape_mask = features.geometry_mask(shapes_for_mask, out_shape=(tile.h, tile.w), transform=landcover.dataset.window_transform(window))
+                    window_data.mask = window_data.mask | shape_mask
+                    window_data = window_data.filled(0)
+
+                    # get pixels where terrain is good
+                    window_data = np.isin(window_data, good_terrain_for_hab)
+
+                    # mask out pixels not within elevation range (if elevation raster is provided)
+                    if elevation_fn is not None:
                         elev_window = Window(tile.x + x_offset, tile.y + y_offset, tile.w, tile.h)
-
-                        # mask out pixels from landcover not within range of shapes
-                        window_data = landcover.dataset.read(window=window, masked=True)
                         elev_window_data = elev.dataset.read(window=elev_window)
-                        shape_mask = features.geometry_mask(shapes_for_mask, out_shape=(tile.h, tile.w), transform=landcover.dataset.window_transform(window))
-                        window_data.mask = window_data.mask | shape_mask
-                        window_data = window_data.filled(0)
+                        window_data = window_data & (elev_window_data >= min_elev) & (elev_window_data <= max_elev)
 
-                        # get pixels where terrain is good
-                        window_data = (elev_window_data >= min_elev) & (elev_window_data <= max_elev) & np.isin(window_data, good_terrain_for_hab)
-                        output.dataset.write(window_data, window=window)
+                    # write the window result
+                    output.dataset.write(window_data, window=window)
 
-                    # remove old attribute table if it exists so that values can be updated
-                    if os.path.isfile(habitat_fn + ".aux.xml"):
-                        os.remove(habitat_fn + ".aux.xml")
+                # remove old attribute table if it exists so that values can be updated
+                if os.path.isfile(habitat_fn + ".aux.xml"):
+                    os.remove(habitat_fn + ".aux.xml")
+            
+                if elevation_fn is not None:
+                    elev.dataset.close()
         
         print("Habitat layer successfully generated for", species_code)
 

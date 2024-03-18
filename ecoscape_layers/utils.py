@@ -4,7 +4,7 @@ from pyproj import Transformer
 from osgeo import gdal
 
             
-def warp(input, output, crs, bounds, padding, resolution):
+def warp(input, output, crs, bounds, padding, resolution, resampling='near'):
     '''
     :param input: input file path
     :param output: output file path
@@ -12,6 +12,7 @@ def warp(input, output, crs, bounds, padding, resolution):
     :param bounds: output bounds in output CRS
     :param padding: padding to add to the bounds
     :param res: x/y resolution
+    :param resampling: resampling algorithm to use. See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r.
     '''
 
     # Obtain input CRS
@@ -30,6 +31,7 @@ def warp(input, output, crs, bounds, padding, resolution):
         'outputBounds': padded_bounds,
         'xRes': resolution,
         'yRes': resolution,
+        'resampleAlg': resampling
     }
 
     gdal.Warp(output, input, **kwargs)

@@ -34,13 +34,17 @@ Required:
 
 Optional:
 
-- `habitat_fn` name of output habitat layer.
+- `habitat_fn`: name of output habitat layer.
 
-- `out_landcover_fn`: name of outputted landcover matrix layer if a new one is produced by cropping/reprojection/rescaling. If not given, one can be generated from the initial landcover matrix from landcover_fn based on the parameters applied.
+- `out_landcover_fn`: name of outputted landcover matrix layer if a new one is produced by cropping/reprojection/rescaling.
 
-- `resistance_dict_fn` name of output resistance dictionary CSV.
+- `resistance_dict_fn`: name of output resistance dictionary CSV.
+
+- `elevation_fn`: path to optional input elevation raster for filtering habitats by species elevation.
 
 - `range_fn`: name of output range map for the species, which is downloaded as an intermediate step for producing the habitat layer.
+
+- `range_src`: source from which to obtain range maps; "iucn" or "ebird".
     
 - `crs`: desired common CRS of the outputted layers as an ESRI WKT string, or None to use the CRS of the input landcover raster.
     - <b>Note</b>: if the ESRI WKT string contains double quotes that are ignored when the string is given as a command line argument, use single quotes in place of double quotes.
