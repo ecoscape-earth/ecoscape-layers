@@ -108,7 +108,7 @@ class LayerGenerator(object):
             with open(output_path, "wb") as res_file:
                 res_file.write(res.content)
 
-    def generate_resistance_table(self, habitats, output_path):
+    def generate_resistance_table(self, habitats, output_path, refine_method):
         """
         Generates the resistance dictionary for a given species as a CSV file using habitat preference data from the IUCN Red List.
         - Major importance terrain is assigned a resistance of 0.
@@ -125,9 +125,14 @@ class LayerGenerator(object):
             for map_code in self.get_map_codes():
                 h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
                 if h is not None:
+                    if refine_method == "forest" or refine_method == "forest_add308":
+                        h['resistance'] = 0 if map_code >= 100 and map_code < 200 else h['resistance']
                     writer.writerow(h.values())
                 else:
-                    writer.writerow([''] * 5 + [map_code] + [1])
+                    if refine_method == "forest" or refine_method == "forest_add308":
+                        writer.writerow([''] * 5 + [map_code] + [0 if map_code >= 100 and map_code < 200 else 1])
+                    else:
+                        writer.writerow([''] * 5 + [map_code] + [1])
 
     def get_good_terrain(self, habitats, refine_method="forest_add308"):
         """
@@ -182,7 +187,18 @@ class LayerGenerator(object):
         make_dirs_for_file(range_fn)
         
         # Obtain species habitat information from the IUCN Red List.
-        sci_name = self.redlist.get_scientific_name(species_code)
+        # Manual corrections made here for differences between eBird and IUCN Red List scientific names.
+        if species_code == "whhwoo":
+            sci_name = "Leuconotopicus albolarvatus"
+        elif species_code == "yebmag":
+            sci_name = "Pica nutalli"
+        elif species_code == "pilwoo":
+            sci_name = "Hylatomus pileatus"
+        elif species_code == "recwoo":
+            sci_name = "Leuconotopicus borealis"
+        else:
+            sci_name = self.redlist.get_scientific_name(species_code)
+        
         habs = self.redlist.get_habitat_data(sci_name)
 
         if refine_method == "forest_add308" and len([hab for hab in habs if hab["code"] == "3.8"]) == 0:
@@ -191,8 +207,8 @@ class LayerGenerator(object):
         if len(habs) == 0:
             raise AssertionError("Habitat preferences for " + str(species_code) + " could not be found on the IUCN Red List (perhaps due to a name mismatch with eBird?). Habitat layer and resistance dictionary were not generated.")
 
-        # Create the resistance table for the species.
-        self.generate_resistance_table(habs, resistance_dict_fn)
+        # Create the resistance table for each species.
+        self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
 
         # Obtain species range as either shapefile from IUCN or geopackage from eBird.
         if range_src == "iucn":
