@@ -39,6 +39,8 @@ class RedList():
             return "Pica nutalli"
         elif species_code == "pilwoo":
             return "Hylatomus pileatus"
+        elif species_code == "recwoo":
+            return "Leuconotopicus borealis"
 
         res = get_taxonomy(self.ebird_key, species=species_code)
         return res[0]["sciName"] if len(res) > 0 else None

@@ -20,18 +20,20 @@ class LayerGenerator(object):
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
 
-    def __init__(self, redlist_key, ebird_key, landcover_path, iucn_range_src=None):
+    def __init__(self, redlist_key, ebird_key, landcover_path, elevation_path=None, iucn_range_src=None):
         """
         Initializes a LayerGenerator object.
 
         :param redlist_key: IUCN Red List API key.
         :param ebird_key: eBird API key.
         :param landcover_path: file path to the initial landcover raster.
+        :param elevation_path: file path to optional input elevation raster for filtering habitat by elevation; use None for no elevation consideration.
         :param iucn_range_src: file path to the IUCN range source if wanted.
         """
-        self.landcover_path = os.path.abspath(landcover_path)
         self.redlist = RedList(redlist_key, ebird_key)
         self.ebird_key = ebird_key
+        self.landcover_path = os.path.abspath(landcover_path)
+        self.elevation_path = None if elevation_path is None else os.path.abspath(elevation_path)
         self.iucn_range_src = iucn_range_src
 
     def get_map_codes(self):
@@ -52,9 +54,8 @@ class LayerGenerator(object):
         :param input_ranges_gdb: path to input file (/BOTW.gdb)
         :param output_path: path for output .shp file (if exists already, the old file(s) will be deleted)
         '''
-        # We want to set this option to avoid spending too much time organizing polygons.
-        # See https://gdal.org/api/ogrgeometry_cpp.html#_CPPv4N18OGRGeometryFactory16organizePolygonsEPP11OGRGeometryiPiPPKc
-        # and https://gdal.org/user/configoptions.html#general-options.
+        # We choose to use this option to avoid spending too much time organizing polygons.
+        # See https://gdal.org/api/ogrgeometry_cpp.html#_CPPv4N18OGRGeometryFactory16organizePolygonsEPP11OGRGeometryiPiPPKc, https://gdal.org/user/configoptions.html#general-options.
         gdal.SetConfigOption('OGR_ORGANIZE_POLYGONS', 'CCW_INNER_JUST_AFTER_CW_OUTER')
 
         # Open input file and layer, and apply attribute filter using scientific name
@@ -153,7 +154,7 @@ class LayerGenerator(object):
         elif refine_method == "majoronly":
             return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
     
-    def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None, elevation_fn=None,
+    def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None,
                          range_fn=None, range_src="ebird", refine_method="forest", refine_list=None):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
@@ -161,8 +162,7 @@ class LayerGenerator(object):
         :param species_code: 6-letter eBird code of the bird speciess to generate layers for.
         :param habitat_fn: name of output habitat layer.
         :param resistance_dict_fn: name of output resistance dictionary CSV.
-        :param elevation_fn: name of input elevation raster for filtering habitat by elevation.
-        :param range_fn: name of output range map for the species, which is downloaded as an intermediate step for producing the habitat layer.
+        :param range_fn: name of output range map for the species, which may be created as an intermediate step for producing the habitat layer.
         :param range_src: source from which to obtain range maps; "ebird" or "iucn".
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
@@ -187,18 +187,7 @@ class LayerGenerator(object):
         make_dirs_for_file(range_fn)
         
         # Obtain species habitat information from the IUCN Red List.
-        # Manual corrections made here for differences between eBird and IUCN Red List scientific names.
-        if species_code == "whhwoo":
-            sci_name = "Leuconotopicus albolarvatus"
-        elif species_code == "yebmag":
-            sci_name = "Pica nutalli"
-        elif species_code == "pilwoo":
-            sci_name = "Hylatomus pileatus"
-        elif species_code == "recwoo":
-            sci_name = "Leuconotopicus borealis"
-        else:
-            sci_name = self.redlist.get_scientific_name(species_code)
-        
+        sci_name = self.redlist.get_scientific_name(species_code)
         habs = self.redlist.get_habitat_data(sci_name)
 
         if refine_method == "forest_add308" and len([hab for hab in habs if hab["code"] == "3.8"]) == 0:
@@ -207,7 +196,7 @@ class LayerGenerator(object):
         if len(habs) == 0:
             raise AssertionError("Habitat preferences for " + str(species_code) + " could not be found on the IUCN Red List (perhaps due to a name mismatch with eBird?). Habitat layer and resistance dictionary were not generated.")
 
-        # Create the resistance table for each species.
+        # Create the resistance table.
         self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
 
         # Obtain species range as either shapefile from IUCN or geopackage from eBird.
@@ -228,7 +217,6 @@ class LayerGenerator(object):
 
             # Prepare range defined as shapes for masking
             if range_src == "iucn":
-                # correction for polygon coordinates format
                 for s in range_shapes:
                     if s['geometry']['type'] == 'Polygon':
                         s['geometry']['coordinates'] = [[el[0] for el in s['geometry']['coordinates'][0]]]
@@ -242,9 +230,9 @@ class LayerGenerator(object):
             # Create the habitat layer
             with landcover.clone_shape(habitat_fn) as output:
                 # If elevation raster is provided, obtain min/max elevation and read elevation raster
-                if elevation_fn is not None:
+                if self.elevation_path is not None:
                     min_elev, max_elev = self.redlist.get_elevation(sci_name)
-                    elev = GeoTiff.from_file(elevation_fn)
+                    elev = GeoTiff.from_file(self.elevation_path)
                     cropped_window = from_bounds(*output.dataset.bounds, transform=elev.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
                     x_offset, y_offset = cropped_window.col_off, cropped_window.row_off
                 
@@ -266,7 +254,7 @@ class LayerGenerator(object):
                     window_data = np.isin(window_data, good_terrain_for_hab)
 
                     # mask out pixels not within elevation range (if elevation raster is provided)
-                    if elevation_fn is not None:
+                    if self.elevation_path is not None:
                         elev_window = Window(tile.x + x_offset, tile.y + y_offset, tile.w, tile.h)
                         elev_window_data = elev.dataset.read(window=elev_window)
                         window_data = window_data & (elev_window_data >= min_elev) & (elev_window_data <= max_elev)
@@ -278,7 +266,7 @@ class LayerGenerator(object):
                 if os.path.isfile(habitat_fn + ".aux.xml"):
                     os.remove(habitat_fn + ".aux.xml")
             
-                if elevation_fn is not None:
+                if self.elevation_path is not None:
                     elev.dataset.close()
         
         print("Habitat layer successfully generated for", species_code)
