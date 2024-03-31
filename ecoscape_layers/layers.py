@@ -228,7 +228,7 @@ class LayerGenerator(object):
             good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
             # Create the habitat layer
-            with landcover.clone_shape(habitat_fn, None) as output:
+            with landcover.clone_shape(habitat_fn) as output:
                 # If elevation raster is provided, obtain min/max elevation and read elevation raster
                 if self.elevation_fn is not None:
                     min_elev, max_elev = self.redlist.get_elevation(sci_name)
@@ -263,6 +263,10 @@ class LayerGenerator(object):
 
                 if self.elevation_fn is not None:
                     elev.dataset.close()
+            
+            # This sets nodata to None for now, but should be changed later if scgt is modified to support that.
+            with GeoTiff.from_file(habitat_fn) as output:
+                output.dataset.nodata = None
         
         print("Habitat layer successfully generated for", species_code)
 
