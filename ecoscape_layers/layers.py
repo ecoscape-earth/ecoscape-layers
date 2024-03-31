@@ -1,76 +1,17 @@
 import csv
-import fiona
 import numpy as np
 import os
 import requests
-from ebird.api import get_taxonomy
-from pyproj import Transformer
 from rasterio import features
 from rasterio.windows import Window, from_bounds, bounds
 from scgt import GeoTiff
+from shapely import unary_union
 from shapely.geometry import shape
+from osgeo import gdal, ogr
 
-from .constants import REFINE_METHODS
-
-
-class RedList():
-    """
-    A module of functions that involve interfacing with the IUCN Red List API.
-    """
-
-    def __init__(self, redlist_key, ebird_key):
-        """
-        Initializes a RedList object.
-        API keys are required to access the IUCN Red List API and eBird API respectively; see the documentation for more information.
-        """
-        self.redlist_params = { "token": redlist_key }
-        self.ebird_key = ebird_key
-
-    def get_from_redlist(self, url):
-        """
-        Convenience function for sending GET request to Red List API with the key.
-
-        :param url: the URL for the request.
-        :return: response for the request.
-        """
-        res = requests.get(url, params=self.redlist_params).json()
-        return res["result"]
-
-    def get_scientific_name(self, species):
-        """
-        Translates eBird codes to scientific names for use in Red List.
-
-        :param species: 6-letter eBird code for a bird species.
-        :return: the scientific name of the bird species.
-        """
-        res = get_taxonomy(self.ebird_key, species=species)
-        return res[0]["sciName"] if len(res) > 0 else None
-
-    def get_habitats(self, name, region=None):
-        """
-        Gets habitat assessments for suitability for a given species.
-        This also adds the associated landcover map's code and resistance value to the API response, which are useful for creating resistance mappings and/or habitat layers.
-
-        :param name: scientific name of the species.
-        :param region: a specific region to assess habitats in (see https://apiv3.iucnredlist.org/api/v3/docs#regions).
-        :return: a list of habitats identified by the IUCN Red List as suitable for the species.
-        """
-        url = "https://apiv3.iucnredlist.org/api/v3/habitats/species/name/{0}".format(name)
-        if region is not None:
-            url += "/region/{1}".format(region)
-
-        habs = self.get_from_redlist(url)
-
-        for hab in habs:
-            code = hab["code"]
-            sep = code.index(".")
-            # only take up to level 2 (xx.xx), therefore truncating codes with more than 1 period separator
-            if code.count(".") > 1:
-                code = code[:code.index(".", sep+1)]
-            hab["map_code"] = int(code[:sep] + code[sep+1:].zfill(2))
-            hab["resistance"] = 0 if hab["majorimportance"] == "Yes" else 0.1
-
-        return habs
+from .constants import HAB_308, REFINE_METHODS
+from .redlist import RedList
+from .utils import reproject_shapefile, make_dirs_for_file
 
 
 class LayerGenerator(object):
@@ -79,116 +20,81 @@ class LayerGenerator(object):
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
 
-    def __init__(self, redlist_key, ebird_key, landcover_path, crs=None, resolution=None, resampling="near",
-                 bounds=None, padding=0, out_landcover_path=None):
+    def __init__(self, redlist_key, ebird_key, landcover_fn, elevation_fn=None, iucn_range_src=None):
         """
         Initializes a LayerGenerator object.
 
         :param redlist_key: IUCN Red List API key.
         :param ebird_key: eBird API key.
-        :param landcover_path: file path to the initial landcover raster.
-        :param crs: desired common CRS of the layers as an ESRI WKT string.
-        :param resolution: desired resolution of the layers in the units of the CRS as an integer.
-        :param resampling: resampling method if resampling is necessary to produce layers with the desired CRS and/or resolution.
-        :param bounds: bounds to crop generated layers to in the units of the chosen CRS, specified as a bounding box (xmin, ymin, xmax, ymax).
-        :param padding: padding in units of chosen CRS to add around the bounds.
-        :param out_landcover_path: file path to save new landcover to if a new one is produced by cropping/reprojection/rescaling. If not given, one can be generated based on the parameters applied.
+        :param landcover_fn: file path to the initial landcover raster.
+        :param elevation_fn: file path to optional input elevation raster for filtering habitat by elevation; use None for no elevation consideration.
+        :param iucn_range_src: file path to the IUCN range source if wanted.
         """
-        self.landcover_path = os.path.abspath(landcover_path)
         self.redlist = RedList(redlist_key, ebird_key)
         self.ebird_key = ebird_key
-        self.crs = crs
-        self.resolution = resolution
-        self.resampling = resampling
-        self.bounds = bounds
-        self.padding = padding
-
-        # rio_resampling accounts for rasterio's different resampling parameter names from gdal
-        if self.resampling == "near":
-            self.rio_resampling = "nearest"
-        elif self.resampling == "cubicspline":
-            self.rio_resampling = "cubic_spline"
-        else:
-            self.rio_resampling = self.resampling
-        
-        self.out_landcover_path = os.path.abspath(out_landcover_path) if out_landcover_path else None
-
-    def process_landcover(self):
-        """
-        Processes the landcover layer based on the parameters specified at initialization.
-        If no reprojection or cropping is needed, it may not be necessary to generate a new layer file.
-        """
-        self.orig_landcover_path = self.landcover_path
-
-        # reproject/crop landcover if needed
-        self.reproject_landcover()
-        self.crop_landcover()
-        
-        if self.orig_landcover_path != self.landcover_path:
-            # if a specific output landcover path was specified, rename the processed file to that
-            if self.out_landcover_path:
-                os.replace(self.landcover_path, self.out_landcover_path)
-                if os.path.isfile(self.landcover_path + ".aux.xml"):
-                    os.replace(self.landcover_path + ".aux.xml", self.out_landcover_path + ".aux.xml")
-                self.landcover_path = self.out_landcover_path
-            print("New landcover in", self.landcover_path)
-        else:
-            print("Landcover already meets the desired parameters, no reprojection or cropping needed")
-
-    def reproject_landcover(self):
-        """
-        Reprojects the landcover to the CRS and resolution desired if needed, creating a new file in doing so.
-        landcover_path is reassigned to the path of this new file.
-        The CRS and resolution are taken from the current class instance's settings if specified.
-        If reprojection occurs, the resampling method used is taken from the current class instance.
-        """
-        with GeoTiff.from_file(self.landcover_path) as ter:
-            if self.crs is None:
-                self.crs = ter.dataset.crs
-            if self.resolution is None:
-                self.resolution = int(ter.dataset.transform[0])
-            
-            # reproject landcover if resolution and/or CRS attributes differ from current resolution and CRS
-            if self.resolution != int(ter.dataset.transform[0]) or self.crs != ter.dataset.crs:
-                reproj_landcover_path = self.landcover_path[:-4] + "_" + str(self.resolution) + "_" + self.resampling + ".tif"
-                ter.reproject_from_crs(reproj_landcover_path, self.crs, (self.resolution, self.resolution), self.rio_resampling)
-
-                self.landcover_path = reproj_landcover_path
-
-    def crop_landcover(self):
-        """
-        Crops the landcover to the desired bounding rectangle with optional padding.
-        This does not modify the existing file, but creates a new one that landcover_path is assigned to.
-        """
-        if self.bounds is None:
-            return
-        if not isinstance(self.bounds, tuple):
-            raise TypeError("Bounds should be given as a tuple of 4 coordinates")
-        if len(self.bounds) != 4:
-            raise ValueError("Invalid bounding box, bounds should have 4 coordinates")
-
-        with GeoTiff.from_file(self.landcover_path) as file:
-            # check that file is not already cropped to the bounds (rounded by window lengths/offsets)
-            padded_bounds = (self.bounds[0] - self.padding, self.bounds[1] - self.padding, self.bounds[2] + self.padding, self.bounds[3] + self.padding)
-            cropped_window = from_bounds(*padded_bounds, transform=file.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
-            crop_bounds = bounds(cropped_window, file.dataset.transform)
-
-            if crop_bounds != file.dataset.bounds:
-                # perform the cropping operation if needed
-                cropped_landcover_path = self.landcover_path[:-4] + "_cropped.tif"
-                cropped_file = file.crop_to_new_file(cropped_landcover_path, bounds=self.bounds, padding=self.padding)
-                cropped_file.dataset.close()
-                self.landcover_path = cropped_landcover_path
+        self.landcover_fn = os.path.abspath(landcover_fn)
+        self.elevation_fn = None if elevation_fn is None else os.path.abspath(elevation_fn)
+        self.iucn_range_src = iucn_range_src
 
     def get_map_codes(self):
         """
         Obtains the list of unique landcover map codes present in the landcover map.
         This is used to determine the map codes for which resistance values need to be defined.
         """
-        with GeoTiff.from_file(self.landcover_path) as landcover:
+        with GeoTiff.from_file(self.landcover_fn) as landcover:
             tile = landcover.get_all_as_tile()
             map_codes = sorted(list(np.unique(tile.m)))
         return map_codes
+    
+    def get_range_from_iucn(self, species_name, input_ranges_gdb, output_path):
+        '''
+        Using IUCN gdb file, creates shapefiles usable for refining ranges for specific species with GDAL's ogr module.
+
+        :param species_name: scientific name of species to obtain range for.
+        :param input_ranges_gdb: path to input file (/BOTW.gdb)
+        :param output_path: path for output .shp file (if exists already, the old file(s) will be deleted)
+        '''
+        # We choose to use this option to avoid spending too much time organizing polygons.
+        # See https://gdal.org/api/ogrgeometry_cpp.html#_CPPv4N18OGRGeometryFactory16organizePolygonsEPP11OGRGeometryiPiPPKc, https://gdal.org/user/configoptions.html#general-options.
+        gdal.SetConfigOption('OGR_ORGANIZE_POLYGONS', 'CCW_INNER_JUST_AFTER_CW_OUTER')
+
+        # Open input file and layer, and apply attribute filter using scientific name
+        input_src = ogr.Open(input_ranges_gdb, 0)
+        input_layer = input_src.GetLayer()
+        input_layer_defn = input_layer.GetLayerDefn()
+        input_layer.SetAttributeFilter("sci_name = '" + species_name + "'")
+        input_spatial_ref = input_layer.GetSpatialRef()
+        input_spatial_ref.MorphToESRI()
+
+        # Define output driver, delete old output file(s) if they exist
+        output_driver = ogr.GetDriverByName('ESRI Shapefile')
+        if os.path.exists(output_path):
+            output_driver.DeleteDataSource(output_path)
+        
+        # Create the output shapefile
+        output_src = output_driver.CreateDataSource(output_path)
+        output_layer_name = os.path.splitext(os.path.split(output_path)[1])[0]
+        output_layer = output_src.CreateLayer(output_layer_name, geom_type=ogr.wkbMultiPolygon)
+
+        # Add fields to output
+        for i in range(0, input_layer_defn.GetFieldCount()):
+            output_layer.CreateField(input_layer_defn.GetFieldDefn(i))
+
+        # Add filtered features to output
+        for inFeature in input_layer:
+            output_layer.CreateFeature(inFeature)
+
+        # Create .prj file by taking the projection of the input file
+        output_prj = open(os.path.splitext(output_path)[0] + '.prj', 'w')
+        output_prj.write(input_spatial_ref.ExportToWkt())
+        output_prj.close()
+
+        # Save and close files
+        input_src = None
+        output_src = None
+
+        # Reset the GDAL config option
+        gdal.SetConfigOption('OGR_ORGANIZE_POLYGONS', 'DEFAULT')
 
     def get_range_from_ebird(self, species_code, output_path):
         """
@@ -199,8 +105,9 @@ class LayerGenerator(object):
         """
         req_url = f"https://st-download.ebird.org/v1/fetch?objKey=2022/{species_code}/ranges/{species_code}_range_smooth_9km_2022.gpkg&key={self.ebird_key}"
         res = requests.get(req_url)
-        with open(output_path, "wb") as res_file:
-            res_file.write(res.content)
+        if res.status_code == 200:
+            with open(output_path, "wb") as res_file:
+                res_file.write(res.content)
 
     def generate_resistance_table(self, habitats, output_path, refine_method):
         """
@@ -247,15 +154,16 @@ class LayerGenerator(object):
         elif refine_method == "majoronly":
             return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
     
-    def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None, range_fn=None,
-                        refine_method="forest", refine_list=None):
+    def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None,
+                         range_fn=None, range_src="ebird", refine_method="forest", refine_list=None):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
 
         :param species_code: 6-letter eBird code of the bird speciess to generate layers for.
         :param habitat_fn: name of output habitat layer.
         :param resistance_dict_fn: name of output resistance dictionary CSV.
-        :param range_fn: name of output range map for the species, which is downloaded as an intermediate step for producing the habitat layer.
+        :param range_fn: name of output range map for the species, which may be created as an intermediate step for producing the habitat layer.
+        :param range_src: source from which to obtain range maps; "ebird" or "iucn".
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
         """
@@ -269,9 +177,9 @@ class LayerGenerator(object):
         if habitat_fn is None:
             habitat_fn = os.path.join(os.getcwd(), species_code, "habitat.tif")
         if resistance_dict_fn is None:
-            habitat_fn = os.path.join(os.getcwd(), species_code, "resistance.csv")
+            resistance_dict_fn = os.path.join(os.getcwd(), species_code, "resistance.csv")
         if range_fn is None:
-            habitat_fn = os.path.join(os.getcwd(), species_code, "range_map.gpkg")
+            range_fn = os.path.join(os.getcwd(), species_code, "range_map.gpkg")
 
         # Ensure that directories to habitat layer, range map, and resistance dictionary exist.
         make_dirs_for_file(habitat_fn)
@@ -279,54 +187,57 @@ class LayerGenerator(object):
         make_dirs_for_file(range_fn)
         
         # Obtain species habitat information from the IUCN Red List.
-        # Manual corrections made here for differences between eBird and IUCN Red List scientific names.
-        if species_code == "whhwoo":
-            sci_name = "Leuconotopicus albolarvatus"
-        elif species_code == "yebmag":
-            sci_name = "Pica nutalli"
-        elif species_code == "pilwoo":
-            sci_name = "Hylatomus pileatus"
-        elif species_code == "recwoo":
-            sci_name = "Leuconotopicus borealis"
-        else:
-            sci_name = self.redlist.get_scientific_name(species_code)
-        
-        habs = self.redlist.get_habitats(sci_name)
+        sci_name = self.redlist.get_scientific_name(species_code)
+        habs = self.redlist.get_habitat_data(sci_name)
+
         if refine_method == "forest_add308" and len([hab for hab in habs if hab["code"] == "3.8"]) == 0:
-            habs.append({
-                "code": "3.8",
-                "habitat": "Shrubland - Mediterranean-type shrubby vegetation",
-                "suitability": "Suitable",
-                "season": "Resident",
-                "majorimportance": "Yes",
-                "map_code": 308,
-                "resistance": 0
-            })
+            habs.append(HAB_308)
 
         if len(habs) == 0:
-            print("Habitat preferences for", species_code, "could not be found on the IUCN Red List (perhaps due to a name mismatch with eBird?). Habitat layer and resistance dictionary were not generated.")
-            return
+            raise AssertionError("Habitat preferences for " + str(species_code) + " could not be found on the IUCN Red List (perhaps due to a name mismatch with eBird?). Habitat layer and resistance dictionary were not generated.")
 
-        # Create the resistance table for each species.
+        # Create the resistance table.
         self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
 
-        # Download species range as geopackage from eBird.
-        self.get_range_from_ebird(species_code, range_fn)
+        # Obtain species range as either shapefile from IUCN or geopackage from eBird.
+        if range_src == "iucn":
+            if self.iucn_range_src is None:
+                raise ValueError("No IUCN range source was specified. Habitat layer was not generated.")
+            self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
+        else:
+            self.get_range_from_ebird(species_code, range_fn)
+
         if not os.path.isfile(range_fn):
-            print("A range map could not be downloaded for", species_code, "from eBird. Habitat layer was not generated.")
-            return
+            raise FileNotFoundError("Range map could not be found for " + str(species_code) + " from " + ("IUCN" if range_src == "iucn" else "eBird") + ". Habitat layer was not generated.")
 
         # Perform intersection between the range and habitable landcover.
-        with GeoTiff.from_file(self.landcover_path) as landcover:
-            range_shapes = reproject_shapefile(range_fn, self.crs, "range")
-            shapes_for_mask = [shape(range_shapes[0]["geometry"])]
+        with GeoTiff.from_file(self.landcover_fn) as landcover:
+            _, ext = os.path.splitext(range_fn)
+            range_shapes = reproject_shapefile(range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None)
+
+            # Prepare range defined as shapes for masking
+            if range_src == "iucn":
+                for s in range_shapes:
+                    if s['geometry']['type'] == 'Polygon':
+                        s['geometry']['coordinates'] = [[el[0] for el in s['geometry']['coordinates'][0]]]
+                shapes_for_mask = [unary_union([shape(s['geometry']) for s in range_shapes])]
+            else:
+                shapes_for_mask = [shape(range_shapes[0]["geometry"])]
+
+            # Define map codes for which corresponding pixels should be considered habitat
             good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
+            # Create the habitat layer
             with landcover.clone_shape(habitat_fn) as output:
-                # Prevent 0 from being interpreted as a nodata value
-                output.dataset.nodata = -1
-
+                # If elevation raster is provided, obtain min/max elevation and read elevation raster
+                if self.elevation_fn is not None:
+                    min_elev, max_elev = self.redlist.get_elevation(sci_name)
+                    elev = GeoTiff.from_file(self.elevation_fn)
+                    cropped_window = from_bounds(*output.dataset.bounds, transform=elev.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
+                    x_offset, y_offset = cropped_window.col_off, cropped_window.row_off
+                
                 reader = output.get_reader(b=0, w=10000, h=10000)
+                
                 for tile in reader:
                     # get window and fit to the tiff's bounds if necessary
                     tile.fit_to_bounds(width=output.width, height=output.height)
@@ -341,61 +252,21 @@ class LayerGenerator(object):
                     # get pixels where terrain is good
                     window_data = np.isin(window_data, good_terrain_for_hab)
 
+                    # mask out pixels not within elevation range (if elevation raster is provided)
+                    if self.elevation_fn is not None:
+                        elev_window = Window(tile.x + x_offset, tile.y + y_offset, tile.w, tile.h)
+                        elev_window_data = elev.dataset.read(window=elev_window)
+                        window_data = window_data & (elev_window_data >= min_elev) & (elev_window_data <= max_elev)
+
+                    # write the window result
                     output.dataset.write(window_data, window=window)
 
-                # remove old attribute table if it exists so that values can be updated
-                if os.path.isfile(habitat_fn + ".aux.xml"):
-                    os.remove(habitat_fn + ".aux.xml")
+                if self.elevation_fn is not None:
+                    elev.dataset.close()
+            
+            # This sets nodata to None for now, but should be changed later if scgt is modified to support that.
+            with GeoTiff.from_file(habitat_fn) as output:
+                output.dataset.nodata = None
         
         print("Habitat layer successfully generated for", species_code)
 
-def reproject_shapefile(shapes_path, dest_crs, shapes_layer=None, file_path=None):
-    """
-    Takes a specified shapefile or geopackage and reprojects it to a different CRS.
-
-    :param shapes_path: file path to the shapefile or geopackage to reproject.
-    :param dest_crs: CRS to reproject to as an ESRI WKT string.
-    :param shapes_layer: if file is a geopackage, the name of the layer that should be reprojected.
-    :param file_path: if specified, the file path to write the reprojected result to as a shapefile.
-    :return: list of reprojected features.
-    """
-
-    myfeatures = []
-
-    with fiona.open(shapes_path, 'r', layer=shapes_layer) as shp:
-        # create a Transformer for changing from the current CRS to the destination CRS
-        transformer = Transformer.from_crs(crs_from=shp.crs_wkt, crs_to=dest_crs, always_xy=True)
-
-        # loop through polygons in each features, transforming all point coordinates within those polygons
-        for feature in shp:
-            for i, polygon in enumerate(feature['geometry']['coordinates']):
-                for j, ring in enumerate(polygon):
-                    if isinstance(ring, list):
-                        feature['geometry']['coordinates'][i][j] = [transformer.transform(*point) for point in ring]
-                    else:
-                        # "ring" is really just a single point
-                        feature['geometry']['coordinates'][i][j] = [transformer.transform(*ring)]
-            myfeatures.append(feature)
-
-        # if file_path is specified, write the result to a new shapefile
-        if file_path is not None:
-            meta = shp.meta
-            meta.update({
-                'driver': 'ESRI Shapefile',
-                'crs_wkt': dest_crs
-            })
-            with fiona.open(file_path, 'w', **meta) as output:
-                output.writerecords(myfeatures)
-
-    return myfeatures
-
-def make_dirs_for_file(file_name):
-    """
-    Creates intermediate directories in the file path for a file if they don't exist yet.
-    The file itself is not created; this just ensures that the directory of the file and all preceding ones
-    exist first.
-
-    :param file_name: file to make directories for.
-    """
-    dirs, _ = os.path.split(file_name)
-    os.makedirs(dirs, exist_ok=True)
