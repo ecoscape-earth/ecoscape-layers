@@ -20,20 +20,20 @@ class LayerGenerator(object):
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
 
-    def __init__(self, redlist_key, ebird_key, landcover_path, elevation_path=None, iucn_range_src=None):
+    def __init__(self, redlist_key, ebird_key, landcover_fn, elevation_fn=None, iucn_range_src=None):
         """
         Initializes a LayerGenerator object.
 
         :param redlist_key: IUCN Red List API key.
         :param ebird_key: eBird API key.
-        :param landcover_path: file path to the initial landcover raster.
-        :param elevation_path: file path to optional input elevation raster for filtering habitat by elevation; use None for no elevation consideration.
+        :param landcover_fn: file path to the initial landcover raster.
+        :param elevation_fn: file path to optional input elevation raster for filtering habitat by elevation; use None for no elevation consideration.
         :param iucn_range_src: file path to the IUCN range source if wanted.
         """
         self.redlist = RedList(redlist_key, ebird_key)
         self.ebird_key = ebird_key
-        self.landcover_path = os.path.abspath(landcover_path)
-        self.elevation_path = None if elevation_path is None else os.path.abspath(elevation_path)
+        self.landcover_fn = os.path.abspath(landcover_fn)
+        self.elevation_fn = None if elevation_fn is None else os.path.abspath(elevation_fn)
         self.iucn_range_src = iucn_range_src
 
     def get_map_codes(self):
@@ -41,7 +41,7 @@ class LayerGenerator(object):
         Obtains the list of unique landcover map codes present in the landcover map.
         This is used to determine the map codes for which resistance values need to be defined.
         """
-        with GeoTiff.from_file(self.landcover_path) as landcover:
+        with GeoTiff.from_file(self.landcover_fn) as landcover:
             tile = landcover.get_all_as_tile()
             map_codes = sorted(list(np.unique(tile.m)))
         return map_codes
@@ -211,7 +211,7 @@ class LayerGenerator(object):
             raise FileNotFoundError("Range map could not be found for " + str(species_code) + " from " + ("IUCN" if range_src == "iucn" else "eBird") + ". Habitat layer was not generated.")
 
         # Perform intersection between the range and habitable landcover.
-        with GeoTiff.from_file(self.landcover_path) as landcover:
+        with GeoTiff.from_file(self.landcover_fn) as landcover:
             _, ext = os.path.splitext(range_fn)
             range_shapes = reproject_shapefile(range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None)
 
@@ -230,9 +230,9 @@ class LayerGenerator(object):
             # Create the habitat layer
             with landcover.clone_shape(habitat_fn) as output:
                 # If elevation raster is provided, obtain min/max elevation and read elevation raster
-                if self.elevation_path is not None:
+                if self.elevation_fn is not None:
                     min_elev, max_elev = self.redlist.get_elevation(sci_name)
-                    elev = GeoTiff.from_file(self.elevation_path)
+                    elev = GeoTiff.from_file(self.elevation_fn)
                     cropped_window = from_bounds(*output.dataset.bounds, transform=elev.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
                     x_offset, y_offset = cropped_window.col_off, cropped_window.row_off
                 
@@ -254,7 +254,7 @@ class LayerGenerator(object):
                     window_data = np.isin(window_data, good_terrain_for_hab)
 
                     # mask out pixels not within elevation range (if elevation raster is provided)
-                    if self.elevation_path is not None:
+                    if self.elevation_fn is not None:
                         elev_window = Window(tile.x + x_offset, tile.y + y_offset, tile.w, tile.h)
                         elev_window_data = elev.dataset.read(window=elev_window)
                         window_data = window_data & (elev_window_data >= min_elev) & (elev_window_data <= max_elev)
@@ -266,7 +266,7 @@ class LayerGenerator(object):
                 if os.path.isfile(habitat_fn + ".aux.xml"):
                     os.remove(habitat_fn + ".aux.xml")
             
-                if self.elevation_path is not None:
+                if self.elevation_fn is not None:
                     elev.dataset.close()
         
         print("Habitat layer successfully generated for", species_code)

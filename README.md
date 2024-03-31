@@ -4,58 +4,66 @@ This package implements the computation of the landscape matrix layer, habitat l
 
 ## Setup
 
-To use the package, you will need to have API keys for the IUCN Red List and eBird APIs, which are used to obtain various data on bird species:
+To use the package, you will need:
 
-- A key for the IUCN Red List API is obtainable from http://apiv3.iucnredlist.org/.
+- An API key for the IUCN Red List API, which is obtainable from http://apiv3.iucnredlist.org/.
 
-- A key for the eBird Status and Trends API is obtainable from https://science.ebird.org/en/status-and-trends/download-data. We use the data for 2022 in this version of the package. The EcoScape paper uses data from 2020, which has been archived by eBird; see the paper for more details.
+- An API key for the eBird Status and Trends API, which is obtainable from https://science.ebird.org/en/status-and-trends/download-data. We use the data for 2022 in this version of the package. The EcoScape paper uses data from 2020, which has been archived by eBird; see the paper for more details. Note that while eBird is the default source for range maps in layer generation, it mainly provides range map data for birds in the US. If range maps are not found for the species you are studying, consider using range maps from the IUCN Red List (described below).
 
-The initial ladncover raster that we use to produce our layers originates from a global map produced by [Jung et al.](https://doi.org/10.1038/s41597-020-00599-8) and is available for download at https://zenodo.org/record/4058819 (iucn_habitatclassification_composite_lvl2_ver004.zip). It follows the [IUCN Red List Habitat Classification Scheme](https://www.iucnredlist.org/resources/habitat-classification-scheme). Since this raster is quite large, it is advisable to crop to the rough area of study rather than letting the package process the entire global landcover.
+- If you would like to use range maps from the IUCN Red List, you will need to obtain a copy of the dataset in geodatabase format from http://datazone.birdlife.org/species/requestdis. This can then be passed in as an input to the package.
+
+The initial ladncover raster that we use to produce our layers originates from a global map produced by [Jung et al.](https://doi.org/10.1038/s41597-020-00599-8) and is available for download at https://zenodo.org/record/4058819 (iucn_habitatclassification_composite_lvl2_ver004.zip). It follows the [IUCN Red List Habitat Classification Scheme](https://www.iucnredlist.org/resources/habitat-classification-scheme).
 
 ## Usage
 
-This package can be used on the command line or as a Python module.
+This package is used as a module. Use the `warp` function in `utils.py` as needed to produce the landcover matrix layer and/or elevation raster with the desired parameters/bounds. The class `LayerGenerator` in `layers.py` can then be used to create corresponding habitat layers for various bird species.
 
-For the command line, view argument options with `ecoscape_layers --help`.
+Refer to `tests/test_layers.ipynb` for a simple example of how to use the package to produce landcover matrix layers and habitat layers.
 
-For use as a module, the class `LayerGenerator` in `layers.py` can be used to process landcover matrix layers and create habitat layers for various bird species.
+### Preparing the landcover matrix layer
 
-### Arguments
+The `warp` function is used for reprojecting, rescaling, and/or cropping a raster; the primary use for this would be to process the landcover matrix layer before creating the habitat layers for various bird species afterwards. If an elevation raster is also given for creating habitat layers later, this function can also be used to process that with the same projection, resolution, and bounds/padding as the landcover matrix layer. `warp` accepts as required parameters:
 
-Required:
+- `input`: input raster to process.
 
-- `redlist_key`: IUCN Red List API key.
+- `output`: name of the processed raster.
 
-- `ebird_key`: eBird API key.
-
-- `species_code`: 6-letter eBird code of the species for which habitat layers should be generated. This can be found by looking up the species on eBird and taking the 6-letter code found at the end of the species page's URL.
-
-- `landcover_fn`: path to initial landcover raster.
-
-Optional:
-
-- `habitat_fn`: name of output habitat layer.
-
-- `out_landcover_fn`: name of outputted landcover matrix layer if a new one is produced by cropping/reprojection/rescaling.
-
-- `resistance_dict_fn`: name of output resistance dictionary CSV.
-
-- `elevation_fn`: path to optional input elevation raster for filtering habitats by species elevation.
-
-- `range_fn`: name of output range map for the species, which is downloaded as an intermediate step for producing the habitat layer.
-
-- `range_src`: source from which to obtain range maps; "iucn" or "ebird".
-    
 - `crs`: desired common CRS of the outputted layers as an ESRI WKT string, or None to use the CRS of the input landcover raster.
     - <b>Note</b>: if the ESRI WKT string contains double quotes that are ignored when the string is given as a command line argument, use single quotes in place of double quotes.
 
 - `resolution`: desired resolution in the units of the chosen CRS, or None to use the resolution of the input landcover raster.
 
-- `resampling`: resampling method to use if reprojection of the input landcover layer is required; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid options.
+- `bounds`: four coordinate numbers representing a bounding box (xmin, ymin, xmax, ymax) for the output layers in terms of the chosen CRS. Optional, but recommended to specify.
 
-- `bounds`: four coordinate numbers representing a bounding box (xmin, ymin, xmax, ymax) for the output layers in terms of the chosen CRS.
+- `padding`: padding to add around the bounds in the units of the chosen CRS. Optional.
 
-- `padding`: padding to add around the bounds in the units of the chosen CRS.
+- `resampling`: resampling method to use if reprojection of the input landcover layer is required; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid options. Optional.
+
+### Creating habitat layers
+
+Once you have the landcover matrix layer prepared, the `LayerGenerator` instance may be initialized with parameters:
+
+- `redlist_key`: IUCN Red List API key.
+
+- `ebird_key`: eBird API key.
+
+- `landcover_fn`: path to landcover matrix raster. Habitat layers produced under the instance will take on the projection, resolution, and bounds of the landcover matrix raster.
+
+- `elevation_fn`: path to optional elevation raster for filtering habitats by species elevation. If not specified, elevation will not be considered in the creation of habitat layers.
+
+- `iucn_range_src`: path to optional IUCN dataset of ranges for bird species. Refer to Setup for how to obtain this if needed.
+
+You can then use the `generate_habitat` method to produce a habitat layer for a given bird species based on range map data, terrain preferences, and elevation if specified in the constructor. This method takes parameters:
+
+- `species_code`: 6-letter eBird code of the species for which habitat layers should be generated. This can be found by looking up the species on eBird and taking the 6-letter code found at the end of the species page's URL.
+
+- `habitat_fn`: name of output habitat layer.
+
+- `resistance_dict_fn`: name of output resistance dictionary CSV.
+
+- `range_fn`: name of output range map for the species, which is downloaded from eBird or extracted from `iucn_range_src` as an intermediate step for producing the habitat layer.
+
+- `range_src`: source from which to obtain range maps; one of "ebird" or "iucn". If "iucn" is specified, then `iucn_range_src` from the constructor must be specified also.
 
 - `refine_method`: method by which habitat pixels should be selected when creating a habitat layer.
     - `forest`: selects all forest pixels.
@@ -67,6 +75,6 @@ Optional:
 
 ## Known issues
 
-- The eBird and IUCN Red List scientific names do not match for certain bird species, such as the white-headed woodpecker (eBird code: whhwoo). As the IUCN Red List API only accepts scientific names for its API queries, if this occurs for a bird species, the 6-letter eBird species code for the species must be manually matched to the corresponding scientific name from the IUCN Red List.
+- The eBird and IUCN Red List scientific names do not match for certain bird species, such as the white-headed woodpecker (eBird code: `whhwoo`). As the IUCN Red List API only accepts scientific names for its API queries, if this occurs for a bird species, the 6-letter eBird species code for the species must be manually matched to the corresponding scientific name from the IUCN Red List.
 
-- Bird species with different seasonal ranges on eBird are currently not supported.
+- Bird species with seasonal ranges are currently not supported.

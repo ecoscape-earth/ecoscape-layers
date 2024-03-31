@@ -3,7 +3,7 @@ from ebird.api import get_taxonomy
 
 class RedList():
     """
-    A module of functions that involve interfacing with the IUCN Red List API.
+    A module of functions that primarily involve interfacing with the IUCN Red List API.
     """
 
     def __init__(self, redlist_key, ebird_key):
