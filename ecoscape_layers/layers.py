@@ -228,7 +228,7 @@ class LayerGenerator(object):
             good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
             # Create the habitat layer
-            with landcover.clone_shape(habitat_fn) as output:
+            with landcover.clone_shape(habitat_fn, None) as output:
                 # If elevation raster is provided, obtain min/max elevation and read elevation raster
                 if self.elevation_fn is not None:
                     min_elev, max_elev = self.redlist.get_elevation(sci_name)
@@ -236,7 +236,6 @@ class LayerGenerator(object):
                     cropped_window = from_bounds(*output.dataset.bounds, transform=elev.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
                     x_offset, y_offset = cropped_window.col_off, cropped_window.row_off
                 
-                output.dataset.nodata = None
                 reader = output.get_reader(b=0, w=10000, h=10000)
                 
                 for tile in reader:
@@ -262,10 +261,6 @@ class LayerGenerator(object):
                     # write the window result
                     output.dataset.write(window_data, window=window)
 
-                # remove old attribute table if it exists so that values can be updated
-                if os.path.isfile(habitat_fn + ".aux.xml"):
-                    os.remove(habitat_fn + ".aux.xml")
-            
                 if self.elevation_fn is not None:
                     elev.dataset.close()
         
