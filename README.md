@@ -16,7 +16,7 @@ The initial ladncover raster that we use to produce our layers originates from a
 
 ## Usage
 
-This package is used as a module. Use the `warp` function in `utils.py` as needed to produce the landcover matrix layer and/or elevation raster with the desired parameters/bounds. The class `LayerGenerator` in `layers.py` can then be used to create corresponding habitat layers for various bird species.
+This package is used as a module. Use the `warp` function in `layers.py` as needed to produce the landcover matrix layer and/or elevation raster with the desired parameters/bounds. The class `LayerGenerator` in `layers.py` can then be used to create corresponding habitat layers for various bird species.
 
 Refer to `tests/test_layers.ipynb` for a simple example of how to use the package to produce landcover matrix layers and habitat layers.
 

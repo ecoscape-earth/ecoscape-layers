@@ -3,7 +3,7 @@ import numpy as np
 import os
 import requests
 from rasterio import features
-from rasterio.windows import Window, from_bounds, bounds
+from rasterio.windows import Window, from_bounds
 from scgt import GeoTiff
 from shapely import unary_union
 from shapely.geometry import shape
@@ -270,3 +270,37 @@ class LayerGenerator(object):
         
         print("Habitat layer successfully generated for", species_code)
 
+def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='near'):
+    '''
+    :param input: input file path
+    :param output: output file path
+    :param crs: output CRS
+    :param res: x/y resolution
+    :param resampling: resampling algorithm to use. See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r.
+    :param bounds: output bounds in output CRS
+    :param padding: padding to add to the bounds
+    '''
+
+    # Obtain input CRS
+    input_src = gdal.Open(input, 0)
+    input_crs = input_src.GetProjection()
+    input_src = None
+
+    if bounds is not None:
+        padded_bounds = (bounds[0] - padding, bounds[1] - padding, bounds[2] + padding, bounds[3] + padding)
+    else:
+        padded_bounds = None
+
+    # Perform the warp using GDAL
+    kwargs = {
+        'format': 'GTiff',
+        'srcSRS': input_crs,
+        'dstSRS': crs,
+        'creationOptions': { 'COMPRESS=LZW', },
+        'outputBounds': padded_bounds,
+        'xRes': resolution,
+        'yRes': resolution,
+        'resampleAlg': resampling
+    }
+
+    gdal.Warp(output, input, **kwargs)
