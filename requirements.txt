@@ -1,8 +1,9 @@
 ebird-api>=3.0.0
 fiona>=1.8.22
+gdal>=3.0.0
 numpy>=1.20.0
 pyproj>=2.6.1
 rasterio>=1.2.10
 Requests>=2.28.1
-scgt>=0.0.5
+scgt>=0.0.6
 Shapely>=1.8.4
