@@ -61,7 +61,7 @@ You can then use the `generate_habitat` method to produce a habitat layer for a 
 
 - `resistance_dict_fn`: name of output resistance dictionary CSV.
 
-- `range_fn`: name of output range map for the species, which is downloaded from eBird or extracted from `iucn_range_src` as an intermediate step for producing the habitat layer.
+- `range_fn`: name of output range map for the species, which is downloaded from eBird or extracted from `iucn_range_src` as an intermediate step for producing the habitat layer. Based on the source, the type of file returned differs; this should end in `.gpkg` if `range_src` is "ebird" and `.shp` if `range_src` is "iucn".
 
 - `range_src`: source from which to obtain range maps; one of "ebird" or "iucn". If "iucn" is specified, then `iucn_range_src` from the constructor must be specified also.
 
