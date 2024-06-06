@@ -154,8 +154,8 @@ class LayerGenerator(object):
         elif refine_method == "majoronly":
             return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
     
-    def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None,
-                         range_fn=None, range_src="ebird", refine_method="forest", refine_list=None):
+    def generate_habitat(self, species_code, ebird_code=False, habitat_fn=None, resistance_dict_fn=None,
+                         range_fn=None, range_src="iucn", refine_method="forest", refine_list=None):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
 
@@ -167,6 +167,10 @@ class LayerGenerator(object):
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
         """
+
+        # Check that inputs match, if ebird is used and an ebird code is given
+        if range_src == "ebird" and not ebird_code:
+            print("Warning: Cannot get ebird range maps without an ebird species code. Using IUCN range maps instead.")
 
         if refine_list:
             refine_method = None
@@ -187,7 +191,11 @@ class LayerGenerator(object):
         make_dirs_for_file(range_fn)
         
         # Obtain species habitat information from the IUCN Red List.
-        sci_name = self.redlist.get_scientific_name(species_code)
+        if ebird_code:
+            sci_name = self.redlist.get_scientific_name(species_code)
+        else:
+            sci_name = species_code
+        
         habs = self.redlist.get_habitat_data(sci_name)
 
         if refine_method == "forest_add308" and len([hab for hab in habs if hab["code"] == "3.8"]) == 0:
@@ -196,11 +204,12 @@ class LayerGenerator(object):
         if len(habs) == 0:
             raise AssertionError("Habitat preferences for " + str(species_code) + " could not be found on the IUCN Red List (perhaps due to a name mismatch with eBird?). Habitat layer and resistance dictionary were not generated.")
 
+        
         # Create the resistance table.
         self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
 
         # Obtain species range as either shapefile from IUCN or geopackage from eBird.
-        if range_src == "iucn":
+        if range_src == "iucn" or not ebird_code:
             if self.iucn_range_src is None:
                 raise ValueError("No IUCN range source was specified. Habitat layer was not generated.")
             self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
