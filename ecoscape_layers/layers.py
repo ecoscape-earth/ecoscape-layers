@@ -155,7 +155,7 @@ class LayerGenerator(object):
             return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
     
     def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None,
-                         range_fn=None, range_src="iucn", refine_method="forest", refine_list=None, ebird_code=False):
+                         range_fn=None, range_src="iucn", refine_method="forest", refine_list=None):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
         :param species_code: 6-letter eBird code of the bird speciess to generate layers for.
@@ -165,11 +165,10 @@ class LayerGenerator(object):
         :param range_src: source from which to obtain range maps; "ebird" or "iucn".
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
-        :param ebird_code: an eBird code specifically for when a user is using ebird data for the computation. 
         """
 
         # Check that inputs match, if ebird is used and an ebird code is given
-        if range_src == "ebird" and not ebird_code:
+        if range_src == "ebird":
             print("Warning: Cannot get ebird range maps without an ebird species code. Using IUCN range maps instead.")
 
         if refine_list:
@@ -209,7 +208,7 @@ class LayerGenerator(object):
         self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
 
         # Obtain species range as either shapefile from IUCN or geopackage from eBird.
-        if range_src == "iucn" or not ebird_code:
+        if range_src == "iucn":
             if self.iucn_range_src is None:
                 raise ValueError("No IUCN range source was specified. Habitat layer was not generated.")
             self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
