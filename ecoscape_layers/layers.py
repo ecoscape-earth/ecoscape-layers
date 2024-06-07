@@ -154,8 +154,8 @@ class LayerGenerator(object):
         elif refine_method == "majoronly":
             return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
     
-    def generate_habitat(self, species_code, ebird_code=False, habitat_fn=None, resistance_dict_fn=None,
-                         range_fn=None, range_src="iucn", refine_method="forest", refine_list=None):
+    def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None,
+                         range_fn=None, range_src="iucn", refine_method="forest", refine_list=None, ebird_code=False):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
 
@@ -191,7 +191,7 @@ class LayerGenerator(object):
         make_dirs_for_file(range_fn)
         
         # Obtain species habitat information from the IUCN Red List.
-        if ebird_code:
+        if range_src == "ebird":
             sci_name = self.redlist.get_scientific_name(species_code)
         else:
             sci_name = species_code
