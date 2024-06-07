@@ -158,7 +158,6 @@ class LayerGenerator(object):
                          range_fn=None, range_src="iucn", refine_method="forest", refine_list=None, ebird_code=False):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
-
         :param species_code: 6-letter eBird code of the bird speciess to generate layers for.
         :param habitat_fn: name of output habitat layer.
         :param resistance_dict_fn: name of output resistance dictionary CSV.
@@ -166,6 +165,7 @@ class LayerGenerator(object):
         :param range_src: source from which to obtain range maps; "ebird" or "iucn".
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
+        :param ebird_code: an eBird code specifically for when a user is using ebird data for the computation. 
         """
 
         # Check that inputs match, if ebird is used and an ebird code is given
