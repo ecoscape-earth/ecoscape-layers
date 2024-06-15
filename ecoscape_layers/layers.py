@@ -311,8 +311,16 @@ def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='nea
     # get memory in MB with minimum of 1GB or total memory
     total_memory = psutil.virtual_memory().total
     min_memory = 1 * (1024**3)
-    available_memory = max(min_memory, psutil.virtual_memory().available)
-    max_memory = min(available_memory, total_memory) // (1024**2)
+    available_memory = psutil.virtual_memory().available
+    if total_memory < min_memory:
+        memory = None
+    elif available_memory < min_memory:
+        memory = min_memory
+    else:
+        memory = available_memory
+    memory = None if not memory else (memory // (1024**2))
+
+    # check if the memory is enough for the warp (500)
 
     # Perform the warp using GDAL
     kwargs = {
@@ -327,7 +335,7 @@ def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='nea
         "yRes": resolution,
         "resampleAlg": resampling,
         "multithread": True,
-        "warpMemoryLimit": max_memory,
+        "warpMemoryLimit": memory,
         "callback": _progress_callback,
     }
 
