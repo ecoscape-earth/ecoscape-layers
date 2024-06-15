@@ -301,7 +301,8 @@ def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='nea
     else:
         padded_bounds = None
 
-    progress = tqdm.tqdm(total=100, desc="Warping", unit="%", position=0)
+    input_name = os.path.basename(input)
+    progress = tqdm.tqdm(total=100, desc=f"Warping ({input_name})", unit="%", position=0)
 
     def _progress_callback(complete, message, data):
         progress.update(int(complete * 100 - progress.n))
