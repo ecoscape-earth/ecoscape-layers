@@ -308,7 +308,8 @@ def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='nea
     def _progress_callback(complete, message, data):
         progress.update(int(complete * 100 - progress.n))
 
-    # get memory in MB with minimum of 1GB or total memory
+    # get memory in bytes with minimum of 1GB or total memory
+    # WARNING: gdal docs says that the memory max is in megabytes but it actual wants bytes from testing
     total_memory = psutil.virtual_memory().total
     min_memory = 1 * (1024**3)
     available_memory = psutil.virtual_memory().available
@@ -318,9 +319,6 @@ def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='nea
         memory = min_memory
     else:
         memory = available_memory
-    memory = None if not memory else (memory // (1024**2))
-
-    # check if the memory is enough for the warp (500)
 
     # Perform the warp using GDAL
     kwargs = {
