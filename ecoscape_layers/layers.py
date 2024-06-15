@@ -14,6 +14,7 @@ from .redlist import RedList
 from .utils import reproject_shapefile, make_dirs_for_file
 
 import tqdm
+import psutil
 
 
 class LayerGenerator(object):
@@ -307,6 +308,12 @@ def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='nea
     def _progress_callback(complete, message, data):
         progress.update(int(complete * 100 - progress.n))
 
+    # get memory in MB with minimum of 1GB or total memory
+    total_memory = psutil.virtual_memory().total
+    min_memory = 1 * (1024**3)
+    available_memory = max(min_memory, psutil.virtual_memory().available)
+    max_memory = min(available_memory, total_memory) // (1024**2)
+
     # Perform the warp using GDAL
     kwargs = {
         "format": "GTiff",
@@ -319,6 +326,8 @@ def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='nea
         "xRes": resolution,
         "yRes": resolution,
         "resampleAlg": resampling,
+        "multithread": True,
+        "warpMemoryLimit": max_memory,
         "callback": _progress_callback,
     }
 
