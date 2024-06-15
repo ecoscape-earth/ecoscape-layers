@@ -65,7 +65,7 @@ class LayerGenerator(object):
         input_src = ogr.Open(input_ranges_gdb, 0)
         input_layer = input_src.GetLayer()
         input_layer_defn = input_layer.GetLayerDefn()
-        input_layer.SetAttributeFilter("sci_name = '" + species_name + "'")
+        input_layer.SetAttributeFilter(f"ScientificName = '{species_name}'")
         input_spatial_ref = input_layer.GetSpatialRef()
         input_spatial_ref.MorphToESRI()
 
