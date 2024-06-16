@@ -13,6 +13,9 @@ from .constants import HAB_308, REFINE_METHODS
 from .redlist import RedList
 from .utils import reproject_shapefile, make_dirs_for_file
 
+import tqdm
+import psutil
+
 
 class LayerGenerator(object):
     """
@@ -42,7 +45,7 @@ class LayerGenerator(object):
             tile = landcover.get_all_as_tile()
             map_codes = sorted(list(np.unique(tile.m)))
         return map_codes
-    
+
     def get_range_from_iucn(self, species_name, input_ranges_gdb, output_path):
         '''
         Using IUCN gdb file, creates shapefiles usable for refining ranges for specific species with GDAL's ogr module.
@@ -59,7 +62,7 @@ class LayerGenerator(object):
         input_src = ogr.Open(input_ranges_gdb, 0)
         input_layer = input_src.GetLayer()
         input_layer_defn = input_layer.GetLayerDefn()
-        input_layer.SetAttributeFilter("sci_name = '" + species_name + "'")
+        input_layer.SetAttributeFilter(f"sci_name = '{species_name}'")
         input_spatial_ref = input_layer.GetSpatialRef()
         input_spatial_ref.MorphToESRI()
 
@@ -67,7 +70,7 @@ class LayerGenerator(object):
         output_driver = ogr.GetDriverByName('ESRI Shapefile')
         if os.path.exists(output_path):
             output_driver.DeleteDataSource(output_path)
-        
+
         # Create the output shapefile
         output_src = output_driver.CreateDataSource(output_path)
         output_layer_name = os.path.splitext(os.path.split(output_path)[1])[0]
@@ -138,7 +141,7 @@ class LayerGenerator(object):
             return [hab["map_code"] for hab in habitats if hab["suitability"] == "Suitable"]
         elif refine_method == "majoronly":
             return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
-    
+
     def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None,
                          range_fn=None, range_src="iucn", refine_method="forest", refine_list=None):
         """
@@ -173,10 +176,10 @@ class LayerGenerator(object):
         make_dirs_for_file(habitat_fn)
         make_dirs_for_file(resistance_dict_fn)
         make_dirs_for_file(range_fn)
-        
+
         # Obtain species habitat information from the IUCN Red List.
         sci_name = species_code
-        
+
         habs = self.redlist.get_habitat_data(sci_name)
 
         if refine_method == "forest_add308" and len([hab for hab in habs if hab["code"] == "3.8"]) == 0:
@@ -185,7 +188,7 @@ class LayerGenerator(object):
         if len(habs) == 0:
             raise AssertionError("Habitat preferences for " + str(species_code) + " could not be found on the IUCN Red List. Habitat layer and resistance dictionary were not generated.")
 
-        
+
         # Create the resistance table.
         self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
 
@@ -220,9 +223,9 @@ class LayerGenerator(object):
                     elev = GeoTiff.from_file(self.elevation_fn)
                     cropped_window = from_bounds(*output.dataset.bounds, transform=elev.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
                     x_offset, y_offset = cropped_window.col_off, cropped_window.row_off
-                
+
                 reader = output.get_reader(b=0, w=10000, h=10000)
-                
+
                 for tile in reader:
                     # get window and fit to the tiff's bounds if necessary
                     tile.fit_to_bounds(width=output.width, height=output.height)
@@ -248,11 +251,11 @@ class LayerGenerator(object):
 
                 if self.elevation_fn is not None:
                     elev.dataset.close()
-            
+
             # This sets nodata to None for now, but should be changed later if scgt is modified to support that.
             with GeoTiff.from_file(habitat_fn) as output:
                 output.dataset.nodata = None
-        
+
         print("Habitat layer successfully generated for", species_code)
 
 def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='near'):
@@ -276,16 +279,41 @@ def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='nea
     else:
         padded_bounds = None
 
+    input_name = os.path.basename(input)
+    progress = tqdm.tqdm(total=100, desc=f"Warping ({input_name})", unit="%", position=0)
+
+    def _progress_callback(complete, message, data):
+        progress.update(int(complete * 100 - progress.n))
+
+    # get memory in bytes with minimum of 1GB or total memory
+    # WARNING: gdal docs says that the memory max is in megabytes but it actual wants bytes from testing
+    total_memory = psutil.virtual_memory().total
+    min_memory = 1 * (1024**3)
+    available_memory = psutil.virtual_memory().available
+    if total_memory < min_memory:
+        memory = None
+    elif available_memory < min_memory:
+        memory = min_memory
+    else:
+        memory = available_memory
+
     # Perform the warp using GDAL
     kwargs = {
-        'format': 'GTiff',
-        'srcSRS': input_crs,
-        'dstSRS': crs,
-        'creationOptions': { 'COMPRESS=LZW', },
-        'outputBounds': padded_bounds,
-        'xRes': resolution,
-        'yRes': resolution,
-        'resampleAlg': resampling
+        "format": "GTiff",
+        "srcSRS": input_crs,
+        "dstSRS": crs,
+        "creationOptions": {
+            "COMPRESS=LZW",
+        },
+        "outputBounds": padded_bounds,
+        "xRes": resolution,
+        "yRes": resolution,
+        "resampleAlg": resampling,
+        "multithread": True,
+        "warpMemoryLimit": memory,
+        "callback": _progress_callback,
     }
 
     gdal.Warp(output, input, **kwargs)
+
+    progress.close()
