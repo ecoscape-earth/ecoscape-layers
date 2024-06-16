@@ -29,6 +29,7 @@ class LayerGenerator(object):
         landcover_fn: str,
         elevation_fn: str | None = None,
         iucn_range_src: str | None = None,
+        ebird_key: str | None = None,
     ):
         """
         Initializes a LayerGenerator object.
@@ -36,8 +37,10 @@ class LayerGenerator(object):
         :param landcover_fn: file path to the initial landcover raster.
         :param elevation_fn: file path to optional input elevation raster for filtering habitat by elevation; use None for no elevation consideration.
         :param iucn_range_src: file path to the IUCN range source if wanted.
+        :param ebird_key: eBird API key.
         """
-        self.redlist = RedList(redlist_key)
+        self.redlist = RedList(redlist_key, ebird_key)
+        self.ebird_key = ebird_key
         self.landcover_fn = os.path.abspath(landcover_fn)
         self.elevation_fn = (
             None if elevation_fn is None else os.path.abspath(elevation_fn)
@@ -108,6 +111,23 @@ class LayerGenerator(object):
         # Reset the GDAL config option
         gdal.SetConfigOption("OGR_ORGANIZE_POLYGONS", "DEFAULT")
 
+    def get_range_from_ebird(self, species_code: str, output_path: str):
+        """
+        Gets range map in geopackage (.gpkg) format for a given bird species.
+        :param species_code: 6-letter eBird code for a bird species.
+        :param output_path: path to write the range map to.
+        """
+
+        # check if the species code is a scientific name
+        if len(species_code) != 6:
+            raise ValueError("Species code should be a 6-letter eBird code.")
+
+        req_url = f"https://st-download.ebird.org/v1/fetch?objKey=2022/{species_code}/ranges/{species_code}_range_smooth_9km_2022.gpkg&key={self.ebird_key}"
+        res = requests.get(req_url)
+        if res.status_code == 200:
+            with open(output_path, "wb") as res_file:
+                res_file.write(res.content)
+
     def generate_resistance_table(self, habitats, output_path: str, refine_method: str):
         """
         Generates the resistance dictionary for a given species as a CSV file using habitat preference data from the IUCN Red List.
@@ -175,20 +195,27 @@ class LayerGenerator(object):
     ):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
-        :param species_code: 6-letter code of the bird speciess to generate layers for.
+        :param species_code: IUCN scientific name or 6-letter eBird code that is determined by range_src.
         :param habitat_fn: name of output habitat layer.
         :param resistance_dict_fn: name of output resistance dictionary CSV.
         :param range_fn: name of output range map for the species, which may be created as an intermediate step for producing the habitat layer.
-        :param range_src: source from which to obtain range maps; "iucn".
+        :param range_src: source from which to obtain range maps; "ebird" or "iucn".
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
         """
 
-        # Update the user that IUCN is used instead.
         if range_src == "ebird":
-            print(
-                "Warning: The tool no longer supports ebird range maps. Using IUCN range maps instead."
-            )
+            # check if the species code is a scientific name when using eBird range source
+            if len(species_code) != 6:
+                raise ValueError(
+                    "When using range_src='ebird', species code should be a 6-letter eBird code."
+                )
+
+            # check if the ebird key is provided when using eBird range source
+            if self.ebird_key is None:
+                raise ValueError(
+                    "eBird API key is required to get range maps from eBird."
+                )
 
         if refine_list:
             refine_method = None
@@ -211,7 +238,14 @@ class LayerGenerator(object):
         make_dirs_for_file(range_fn)
 
         # Obtain species habitat information from the IUCN Red List.
-        sci_name = species_code
+        if range_src == "iucn":
+            sci_name = species_code
+        else:
+            sci_name = self.redlist.get_scientific_name(species_code)
+            if sci_name is None:
+                raise ValueError(
+                    f"Scientific name for eBird code '{species_code}' could not be found."
+                )
 
         habs = self.redlist.get_habitat_data(sci_name)
 
@@ -229,16 +263,19 @@ class LayerGenerator(object):
         # Create the resistance table.
         self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
 
-        # Obtain species range as either shapefile from IUCN.
-        if self.iucn_range_src is None:
-            raise ValueError(
-                "No IUCN range source was specified. Habitat layer was not generated."
-            )
-        self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
+        # Obtain species range as either shapefile from IUCN or geopackage from eBird.
+        if range_src == "iucn":
+            if self.iucn_range_src is None:
+                raise ValueError(
+                    "No IUCN range source was specified. Habitat layer was not generated."
+                )
+            self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
+        else:
+            self.get_range_from_ebird(species_code, range_fn)
 
         if not os.path.isfile(range_fn):
             raise FileNotFoundError(
-                f"Range map could not be found for {species_code} from the IUCN Habitat layer was not generated."
+                f"Range map could not be found for {species_code} from the {'IUCN' if range_src == 'iucn' else 'eBird'} Habitat layer was not generated."
             )
 
         # Perform intersection between the range and habitable landcover.
@@ -249,14 +286,17 @@ class LayerGenerator(object):
             )
 
             # Prepare range defined as shapes for masking
-            for s in range_shapes:
-                if s["geometry"]["type"] == "Polygon":
-                    s["geometry"]["coordinates"] = [
-                        [el[0] for el in s["geometry"]["coordinates"][0]]
-                    ]
-            shapes_for_mask = [
-                unary_union([shape(s["geometry"]) for s in range_shapes])
-            ]
+            if range_src == "iucn":
+                for s in range_shapes:
+                    if s["geometry"]["type"] == "Polygon":
+                        s["geometry"]["coordinates"] = [
+                            [el[0] for el in s["geometry"]["coordinates"][0]]
+                        ]
+                shapes_for_mask = [
+                    unary_union([shape(s["geometry"]) for s in range_shapes])
+                ]
+            else:
+                shapes_for_mask = [shape(range_shapes[0]["geometry"])]
 
             # Define map codes for which corresponding pixels should be considered habitat
             good_terrain_for_hab = (
