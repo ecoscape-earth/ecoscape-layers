@@ -23,7 +23,13 @@ class LayerGenerator(object):
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
 
-    def __init__(self, redlist_key: str, landcover_fn: str, elevation_fn:str|None=None, iucn_range_src:str|None=None):
+    def __init__(
+        self,
+        redlist_key: str,
+        landcover_fn: str,
+        elevation_fn: str | None = None,
+        iucn_range_src: str | None = None,
+    ):
         """
         Initializes a LayerGenerator object.
         :param redlist_key: IUCN Red List API key.
@@ -33,7 +39,9 @@ class LayerGenerator(object):
         """
         self.redlist = RedList(redlist_key)
         self.landcover_fn = os.path.abspath(landcover_fn)
-        self.elevation_fn = None if elevation_fn is None else os.path.abspath(elevation_fn)
+        self.elevation_fn = (
+            None if elevation_fn is None else os.path.abspath(elevation_fn)
+        )
         self.iucn_range_src = iucn_range_src
 
     def get_map_codes(self):
@@ -46,17 +54,19 @@ class LayerGenerator(object):
             map_codes = sorted(list(np.unique(tile.m)))
         return map_codes
 
-    def get_range_from_iucn(self, species_name:str, input_ranges_gdb:str, output_path:str):
-        '''
+    def get_range_from_iucn(
+        self, species_name: str, input_ranges_gdb: str, output_path: str
+    ):
+        """
         Using IUCN gdb file, creates shapefiles usable for refining ranges for specific species with GDAL's ogr module.
 
         :param species_name: scientific name of species to obtain range for.
         :param input_ranges_gdb: path to input file (/BOTW.gdb)
         :param output_path: path for output .shp file (if exists already, the old file(s) will be deleted)
-        '''
+        """
         # We choose to use this option to avoid spending too much time organizing polygons.
         # See https://gdal.org/api/ogrgeometry_cpp.html#_CPPv4N18OGRGeometryFactory16organizePolygonsEPP11OGRGeometryiPiPPKc, https://gdal.org/user/configoptions.html#general-options.
-        gdal.SetConfigOption('OGR_ORGANIZE_POLYGONS', 'CCW_INNER_JUST_AFTER_CW_OUTER')
+        gdal.SetConfigOption("OGR_ORGANIZE_POLYGONS", "CCW_INNER_JUST_AFTER_CW_OUTER")
 
         # Open input file and layer, and apply attribute filter using scientific name
         input_src = ogr.Open(input_ranges_gdb, 0)
@@ -67,14 +77,16 @@ class LayerGenerator(object):
         input_spatial_ref.MorphToESRI()
 
         # Define output driver, delete old output file(s) if they exist
-        output_driver = ogr.GetDriverByName('ESRI Shapefile')
+        output_driver = ogr.GetDriverByName("ESRI Shapefile")
         if os.path.exists(output_path):
             output_driver.DeleteDataSource(output_path)
 
         # Create the output shapefile
         output_src = output_driver.CreateDataSource(output_path)
         output_layer_name = os.path.splitext(os.path.split(output_path)[1])[0]
-        output_layer = output_src.CreateLayer(output_layer_name, geom_type=ogr.wkbMultiPolygon)
+        output_layer = output_src.CreateLayer(
+            output_layer_name, geom_type=ogr.wkbMultiPolygon
+        )
 
         # Add fields to output
         for i in range(0, input_layer_defn.GetFieldCount()):
@@ -85,7 +97,7 @@ class LayerGenerator(object):
             output_layer.CreateFeature(inFeature)
 
         # Create .prj file by taking the projection of the input file
-        output_prj = open(os.path.splitext(output_path)[0] + '.prj', 'w')
+        output_prj = open(os.path.splitext(output_path)[0] + ".prj", "w")
         output_prj.write(input_spatial_ref.ExportToWkt())
         output_prj.close()
 
@@ -94,10 +106,9 @@ class LayerGenerator(object):
         output_src = None
 
         # Reset the GDAL config option
-        gdal.SetConfigOption('OGR_ORGANIZE_POLYGONS', 'DEFAULT')
+        gdal.SetConfigOption("OGR_ORGANIZE_POLYGONS", "DEFAULT")
 
-
-    def generate_resistance_table(self, habitats, output_path:str, refine_method:str):
+    def generate_resistance_table(self, habitats, output_path: str, refine_method: str):
         """
         Generates the resistance dictionary for a given species as a CSV file using habitat preference data from the IUCN Red List.
         - Major importance terrain is assigned a resistance of 0.
@@ -115,13 +126,19 @@ class LayerGenerator(object):
                 h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
-                        h['resistance'] = 0 if map_code >= 100 and map_code < 200 else h['resistance']
+                        h["resistance"] = (
+                            0 if map_code >= 100 and map_code < 200 else h["resistance"]
+                        )
                     writer.writerow(h.values())
                 else:
                     if refine_method == "forest" or refine_method == "forest_add308":
-                        writer.writerow([''] * 5 + [map_code] + [0 if map_code >= 100 and map_code < 200 else 1])
+                        writer.writerow(
+                            [""] * 5
+                            + [map_code]
+                            + [0 if map_code >= 100 and map_code < 200 else 1]
+                        )
                     else:
-                        writer.writerow([''] * 5 + [map_code] + [1])
+                        writer.writerow([""] * 5 + [map_code] + [1])
 
     def get_good_terrain(self, habitats, refine_method="forest_add308"):
         """
@@ -138,12 +155,24 @@ class LayerGenerator(object):
         elif refine_method == "forest_add308":
             return [x for x in range(100, 110)] + [308]
         elif refine_method == "allsuitable":
-            return [hab["map_code"] for hab in habitats if hab["suitability"] == "Suitable"]
+            return [
+                hab["map_code"] for hab in habitats if hab["suitability"] == "Suitable"
+            ]
         elif refine_method == "majoronly":
-            return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
+            return [
+                hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"
+            ]
 
-    def generate_habitat(self, species_code:str, habitat_fn:str|None=None, resistance_dict_fn:str|None=None,
-                         range_fn:str|None=None, range_src:str="iucn", refine_method:str|None="forest", refine_list:list|None=None):
+    def generate_habitat(
+        self,
+        species_code: str,
+        habitat_fn: str | None = None,
+        resistance_dict_fn: str | None = None,
+        range_fn: str | None = None,
+        range_src: str = "iucn",
+        refine_method: str | None = "forest",
+        refine_list: list | None = None,
+    ):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
         :param species_code: 6-letter code of the bird speciess to generate layers for.
@@ -157,7 +186,9 @@ class LayerGenerator(object):
 
         # Update the user that IUCN is used instead.
         if range_src == "ebird":
-            print("Warning: The tool no longer supports ebird range maps. Using IUCN range maps instead.")
+            print(
+                "Warning: The tool no longer supports ebird range maps. Using IUCN range maps instead."
+            )
 
         if refine_list:
             refine_method = None
@@ -168,7 +199,9 @@ class LayerGenerator(object):
         if habitat_fn is None:
             habitat_fn = os.path.join(os.getcwd(), species_code, "habitat.tif")
         if resistance_dict_fn is None:
-            resistance_dict_fn = os.path.join(os.getcwd(), species_code, "resistance.csv")
+            resistance_dict_fn = os.path.join(
+                os.getcwd(), species_code, "resistance.csv"
+            )
         if range_fn is None:
             range_fn = os.path.join(os.getcwd(), species_code, "range_map.gpkg")
 
@@ -182,38 +215,55 @@ class LayerGenerator(object):
 
         habs = self.redlist.get_habitat_data(sci_name)
 
-        if refine_method == "forest_add308" and len([hab for hab in habs if hab["code"] == "3.8"]) == 0:
+        if (
+            refine_method == "forest_add308"
+            and len([hab for hab in habs if hab["code"] == "3.8"]) == 0
+        ):
             habs.append(HAB_308)
 
         if len(habs) == 0:
-            raise AssertionError(f"Habitat preferences for {species_code} could not be found on the IUCN Red List. Habitat layer and resistance dictionary were not generated.")
-
+            raise AssertionError(
+                f"Habitat preferences for {species_code} could not be found on the IUCN Red List. Habitat layer and resistance dictionary were not generated."
+            )
 
         # Create the resistance table.
         self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
 
         # Obtain species range as either shapefile from IUCN.
         if self.iucn_range_src is None:
-            raise ValueError("No IUCN range source was specified. Habitat layer was not generated.")
+            raise ValueError(
+                "No IUCN range source was specified. Habitat layer was not generated."
+            )
         self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
 
-
         if not os.path.isfile(range_fn):
-            raise FileNotFoundError(f"Range map could not be found for {species_code} from the IUCN Habitat layer was not generated.")
+            raise FileNotFoundError(
+                f"Range map could not be found for {species_code} from the IUCN Habitat layer was not generated."
+            )
 
         # Perform intersection between the range and habitable landcover.
         with GeoTiff.from_file(self.landcover_fn) as landcover:
             _, ext = os.path.splitext(range_fn)
-            range_shapes = reproject_shapefile(range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None)
+            range_shapes = reproject_shapefile(
+                range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None
+            )
 
             # Prepare range defined as shapes for masking
             for s in range_shapes:
-                    if s['geometry']['type'] == 'Polygon':
-                        s['geometry']['coordinates'] = [[el[0] for el in s['geometry']['coordinates'][0]]]
-            shapes_for_mask = [unary_union([shape(s['geometry']) for s in range_shapes])]
+                if s["geometry"]["type"] == "Polygon":
+                    s["geometry"]["coordinates"] = [
+                        [el[0] for el in s["geometry"]["coordinates"][0]]
+                    ]
+            shapes_for_mask = [
+                unary_union([shape(s["geometry"]) for s in range_shapes])
+            ]
 
             # Define map codes for which corresponding pixels should be considered habitat
-            good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
+            good_terrain_for_hab = (
+                refine_list
+                if refine_list is not None
+                else self.get_good_terrain(habs, refine_method)
+            )
 
             # Create the habitat layer
             with landcover.clone_shape(habitat_fn) as output:
@@ -221,7 +271,13 @@ class LayerGenerator(object):
                 if self.elevation_fn is not None:
                     min_elev, max_elev = self.redlist.get_elevation(sci_name)
                     elev = GeoTiff.from_file(self.elevation_fn)
-                    cropped_window = from_bounds(*output.dataset.bounds, transform=elev.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
+                    cropped_window = (
+                        from_bounds(
+                            *output.dataset.bounds, transform=elev.dataset.transform
+                        )
+                        .round_lengths()
+                        .round_offsets(pixel_precision=0)
+                    )
                     x_offset, y_offset = cropped_window.col_off, cropped_window.row_off
 
                 reader = output.get_reader(b=0, w=10000, h=10000)
@@ -233,7 +289,11 @@ class LayerGenerator(object):
 
                     # mask out pixels from landcover not within range of shapes
                     window_data = landcover.dataset.read(window=window, masked=True)
-                    shape_mask = features.geometry_mask(shapes_for_mask, out_shape=(tile.h, tile.w), transform=landcover.dataset.window_transform(window))
+                    shape_mask = features.geometry_mask(
+                        shapes_for_mask,
+                        out_shape=(tile.h, tile.w),
+                        transform=landcover.dataset.window_transform(window),
+                    )
                     window_data.mask = window_data.mask | shape_mask
                     window_data = window_data.filled(0)
 
@@ -242,9 +302,15 @@ class LayerGenerator(object):
 
                     # mask out pixels not within elevation range (if elevation raster is provided)
                     if self.elevation_fn is not None:
-                        elev_window = Window(tile.x + x_offset, tile.y + y_offset, tile.w, tile.h)
+                        elev_window = Window(
+                            tile.x + x_offset, tile.y + y_offset, tile.w, tile.h
+                        )
                         elev_window_data = elev.dataset.read(window=elev_window)
-                        window_data = window_data & (elev_window_data >= min_elev) & (elev_window_data <= max_elev)
+                        window_data = (
+                            window_data
+                            & (elev_window_data >= min_elev)
+                            & (elev_window_data <= max_elev)
+                        )
 
                     # write the window result
                     output.dataset.write(window_data, window=window)
@@ -258,8 +324,17 @@ class LayerGenerator(object):
 
         print("Habitat layer successfully generated for", species_code)
 
-def warp(input:str, output:str, crs:str, resolution:float, bounds=None, padding:int=0, resampling:str='near'):
-    '''
+
+def warp(
+    input: str,
+    output: str,
+    crs: str,
+    resolution: float,
+    bounds=None,
+    padding: int = 0,
+    resampling: str = "near",
+):
+    """
     :param input: input file path
     :param output: output file path
     :param crs: output CRS
@@ -267,7 +342,7 @@ def warp(input:str, output:str, crs:str, resolution:float, bounds=None, padding:
     :param resampling: resampling algorithm to use. See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r.
     :param bounds: output bounds in output CRS
     :param padding: padding to add to the bounds
-    '''
+    """
 
     # Obtain input CRS
     input_src = gdal.Open(input, 0)
@@ -275,12 +350,19 @@ def warp(input:str, output:str, crs:str, resolution:float, bounds=None, padding:
     input_src = None
 
     if bounds is not None:
-        padded_bounds = (bounds[0] - padding, bounds[1] - padding, bounds[2] + padding, bounds[3] + padding)
+        padded_bounds = (
+            bounds[0] - padding,
+            bounds[1] - padding,
+            bounds[2] + padding,
+            bounds[3] + padding,
+        )
     else:
         padded_bounds = None
 
     input_name = os.path.basename(input)
-    progress = tqdm.tqdm(total=100, desc=f"Warping ({input_name})", unit="%", position=0)
+    progress = tqdm.tqdm(
+        total=100, desc=f"Warping ({input_name})", unit="%", position=0
+    )
 
     def _progress_callback(complete, message, data):
         progress.update(int(complete * 100 - progress.n))
