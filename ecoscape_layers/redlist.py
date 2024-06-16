@@ -6,13 +6,12 @@ class RedList():
     A module of functions that primarily involve interfacing with the IUCN Red List API.
     """
 
-    def __init__(self, redlist_key, ebird_key):
+    def __init__(self, redlist_key: str):
         """
         Initializes a RedList object.
         API keys are required to access the IUCN Red List API and eBird API respectively; see the documentation for more information.
         """
         self.redlist_params = { "token": redlist_key }
-        self.ebird_key = ebird_key
 
     def get_from_redlist(self, url):
         """
@@ -23,27 +22,6 @@ class RedList():
         """
         res = requests.get(url, params=self.redlist_params).json()
         return res["result"]
-
-    def get_scientific_name(self, species_code):
-        """
-        Translates eBird codes to scientific names for use in Red List.
-
-        :param species_code: 6-letter eBird code for a bird species.
-        :return: the scientific name of the bird species.
-        """
-        # Manual corrections here for differences between eBird and IUCN Red List scientific names.
-        # This should probably be changed in the future.
-        if species_code == "whhwoo":
-            return "Leuconotopicus albolarvatus"
-        elif species_code == "yebmag":
-            return "Pica nutalli"
-        elif species_code == "pilwoo":
-            return "Hylatomus pileatus"
-        elif species_code == "recwoo":
-            return "Leuconotopicus borealis"
-
-        res = get_taxonomy(self.ebird_key, species=species_code)
-        return res[0]["sciName"] if len(res) > 0 else None
 
     def get_habitat_data(self, name, region=None):
         """
