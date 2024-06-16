@@ -29,7 +29,6 @@ class LayerGenerator(object):
         :param elevation_fn: file path to optional input elevation raster for filtering habitat by elevation; use None for no elevation consideration.
         :param iucn_range_src: file path to the IUCN range source if wanted.
         """
-
         self.landcover_fn = os.path.abspath(landcover_fn)
         self.elevation_fn = None if elevation_fn is None else os.path.abspath(elevation_fn)
         self.iucn_range_src = iucn_range_src
@@ -94,6 +93,7 @@ class LayerGenerator(object):
         # Reset the GDAL config option
         gdal.SetConfigOption('OGR_ORGANIZE_POLYGONS', 'DEFAULT')
 
+    
     def generate_resistance_table(self, habitats, output_path, refine_method):
         """
         Generates the resistance dictionary for a given species as a CSV file using habitat preference data from the IUCN Red List.
@@ -143,18 +143,18 @@ class LayerGenerator(object):
                          range_fn=None, range_src="iucn", refine_method="forest", refine_list=None):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
-        :param species_code: 6-letter eBird code of the bird speciess to generate layers for.
+        :param species_code: 6-letter code of the bird speciess to generate layers for.
         :param habitat_fn: name of output habitat layer.
         :param resistance_dict_fn: name of output resistance dictionary CSV.
         :param range_fn: name of output range map for the species, which may be created as an intermediate step for producing the habitat layer.
-        :param range_src: source from which to obtain range maps;"iucn".
+        :param range_src: source from which to obtain range maps; "iucn".
         :param refine_method: method by which habitat pixels should be selected ("forest", "forest_add308", "allsuitable", or "majoronly"). See documentation for detailed descriptions of each option.
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
         """
 
-        # Specify to the user that they must use IUCN Range
+        # Update the user that IUCN is used instead. 
         if range_src == "ebird":
-            print("Warning: Using IUCN range maps instead. The tool now uses scientific names and IUCN range maps.")
+            print("Warning: The tool no longer supports ebird range maps. Using IUCN range maps instead.")
 
         if refine_list:
             refine_method = None
@@ -191,10 +191,9 @@ class LayerGenerator(object):
 
         # Obtain species range as either shapefile from IUCN.
         if self.iucn_range_src is None:
-                raise ValueError("No IUCN range source was specified. Habitat layer was not generated.")
-        
+            raise ValueError("No IUCN range source was specified. Habitat layer was not generated.")
         self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
-
+        
 
         if not os.path.isfile(range_fn):
             raise FileNotFoundError("Range map could not be found for " + str(species_code) + " from " + ("IUCN") + ". Habitat layer was not generated.")
@@ -205,11 +204,11 @@ class LayerGenerator(object):
             range_shapes = reproject_shapefile(range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None)
 
             # Prepare range defined as shapes for masking
-            
             for s in range_shapes:
-                if s['geometry']['type'] == 'Polygon':
-                    s['geometry']['coordinates'] = [[el[0] for el in s['geometry']['coordinates'][0]]]
-                shapes_for_mask = [unary_union([shape(s['geometry']) for s in range_shapes])]
+                    if s['geometry']['type'] == 'Polygon':
+                        s['geometry']['coordinates'] = [[el[0] for el in s['geometry']['coordinates'][0]]]
+            shapes_for_mask = [unary_union([shape(s['geometry']) for s in range_shapes])]
+            
             # Define map codes for which corresponding pixels should be considered habitat
             good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
