@@ -15,15 +15,21 @@ class RedList:
         self.redlist_params = {"token": redlist_key}
         self.ebird_key = ebird_key
 
-    def get_from_redlist(self, url):
+    def get_from_redlist(self, url) -> list[dict[str, str | int | float]]:
         """
         Convenience function for sending GET request to Red List API with the key.
 
         :param url: the URL for the request.
         :return: response for the request.
         """
-        res = requests.get(url, params=self.redlist_params).json()
-        return res["result"]
+        res = requests.get(url, params=self.redlist_params)
+
+        if res.status_code != 200:
+            raise ValueError(f"Error {res.status_code} in Red List API request")
+
+        data: dict = res.json()
+
+        return data["result"]
 
     def get_scientific_name(self, species_code) -> str | None:
         """
@@ -48,7 +54,9 @@ class RedList:
         res = get_taxonomy(self.ebird_key, species=species_code)
         return res[0]["sciName"] if len(res) > 0 else None
 
-    def get_habitat_data(self, name: str, region=None):
+    def get_habitat_data(
+        self, name: str, region=None
+    ) -> list[dict[str, str | int | float]]:
         """
         Gets habitat assessments for suitability for a given species.
         This also adds the associated landcover map's code and resistance value to the API response, which are useful for creating resistance mappings and/or habitat layers.
@@ -66,7 +74,7 @@ class RedList:
         habs = self.get_from_redlist(url)
 
         for hab in habs:
-            code = hab["code"]
+            code = str(hab["code"])
             sep = code.index(".")
             # only take up to level 2 (xx.xx), therefore truncating codes with more than 1 period separator
             if code.count(".") > 1:

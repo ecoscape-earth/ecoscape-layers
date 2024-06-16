@@ -128,7 +128,12 @@ class LayerGenerator(object):
             with open(output_path, "wb") as res_file:
                 res_file.write(res.content)
 
-    def generate_resistance_table(self, habitats, output_path: str, refine_method: str):
+    def generate_resistance_table(
+        self,
+        habitats: list[dict[str, str | int | float]],
+        output_path: str,
+        refine_method: str,
+    ):
         """
         Generates the resistance dictionary for a given species as a CSV file using habitat preference data from the IUCN Red List.
         - Major importance terrain is assigned a resistance of 0.
