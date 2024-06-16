@@ -23,15 +23,15 @@ class LayerGenerator(object):
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
 
-    def __init__(self, landcover_fn, elevation_fn=None, iucn_range_src=None):
+    def __init__(self, redlist_key: str, landcover_fn: str, elevation_fn:str|None=None, iucn_range_src:str|None=None):
         """
         Initializes a LayerGenerator object.
-
-        
+        :param redlist_key: IUCN Red List API key.
         :param landcover_fn: file path to the initial landcover raster.
         :param elevation_fn: file path to optional input elevation raster for filtering habitat by elevation; use None for no elevation consideration.
         :param iucn_range_src: file path to the IUCN range source if wanted.
         """
+        self.redlist = RedList(redlist_key)
         self.landcover_fn = os.path.abspath(landcover_fn)
         self.elevation_fn = None if elevation_fn is None else os.path.abspath(elevation_fn)
         self.iucn_range_src = iucn_range_src
@@ -46,7 +46,7 @@ class LayerGenerator(object):
             map_codes = sorted(list(np.unique(tile.m)))
         return map_codes
 
-    def get_range_from_iucn(self, species_name, input_ranges_gdb, output_path):
+    def get_range_from_iucn(self, species_name:str, input_ranges_gdb:str, output_path:str):
         '''
         Using IUCN gdb file, creates shapefiles usable for refining ranges for specific species with GDAL's ogr module.
 
@@ -96,8 +96,8 @@ class LayerGenerator(object):
         # Reset the GDAL config option
         gdal.SetConfigOption('OGR_ORGANIZE_POLYGONS', 'DEFAULT')
 
-    
-    def generate_resistance_table(self, habitats, output_path, refine_method):
+
+    def generate_resistance_table(self, habitats, output_path:str, refine_method:str):
         """
         Generates the resistance dictionary for a given species as a CSV file using habitat preference data from the IUCN Red List.
         - Major importance terrain is assigned a resistance of 0.
@@ -142,8 +142,8 @@ class LayerGenerator(object):
         elif refine_method == "majoronly":
             return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
 
-    def generate_habitat(self, species_code, habitat_fn=None, resistance_dict_fn=None,
-                         range_fn=None, range_src="iucn", refine_method="forest", refine_list=None):
+    def generate_habitat(self, species_code:str, habitat_fn:str|None=None, resistance_dict_fn:str|None=None,
+                         range_fn:str|None=None, range_src:str="iucn", refine_method:str|None="forest", refine_list:list|None=None):
         """
         Runner function for full process of habitat and matrix layer generation for one bird species.
         :param species_code: 6-letter code of the bird speciess to generate layers for.
@@ -155,7 +155,7 @@ class LayerGenerator(object):
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
         """
 
-        # Update the user that IUCN is used instead. 
+        # Update the user that IUCN is used instead.
         if range_src == "ebird":
             print("Warning: The tool no longer supports ebird range maps. Using IUCN range maps instead.")
 
@@ -196,7 +196,7 @@ class LayerGenerator(object):
         if self.iucn_range_src is None:
             raise ValueError("No IUCN range source was specified. Habitat layer was not generated.")
         self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
-        
+
 
         if not os.path.isfile(range_fn):
             raise FileNotFoundError("Range map could not be found for " + str(species_code) + " from " + ("IUCN") + ". Habitat layer was not generated.")
@@ -211,7 +211,7 @@ class LayerGenerator(object):
                     if s['geometry']['type'] == 'Polygon':
                         s['geometry']['coordinates'] = [[el[0] for el in s['geometry']['coordinates'][0]]]
             shapes_for_mask = [unary_union([shape(s['geometry']) for s in range_shapes])]
-            
+
             # Define map codes for which corresponding pixels should be considered habitat
             good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
@@ -258,7 +258,7 @@ class LayerGenerator(object):
 
         print("Habitat layer successfully generated for", species_code)
 
-def warp(input, output, crs, resolution, bounds=None, padding=0, resampling='near'):
+def warp(input:str, output:str, crs:str, resolution:float, bounds=None, padding:int=0, resampling:str='near'):
     '''
     :param input: input file path
     :param output: output file path
