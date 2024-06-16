@@ -1,4 +1,5 @@
 import requests
+import csv
 from ebird.api import get_taxonomy
 
 
@@ -100,3 +101,39 @@ class RedList:
                 res[0]["elevation_lower"] or -10000,
                 res[0]["elevation_upper"] or 10000,
             )
+        
+    def generate_csv(self, name):
+        """
+        This function returns a list of all the species in the IUCN Redlist, in the form of a generated CSV file.
+
+        """
+        url = "https://apiv3.iucnredlist.org/api/v3/species/page/{0}".format(name)
+
+        file_input = self.get_from_redlist(url)
+
+        if file_input:
+            categories = file_input[0].keys()
+            with open(f"global_species.csv", mode= 'w', newline='') as file:
+                write_csv = csv.DictWriter(file, fieldnames=categories)
+                write_csv.writeheader()
+                write_csv.writerows(file_input)
+
+            print("Successfully generated CSV file.")
+        else:
+            print("Cannot access IUCN data.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
