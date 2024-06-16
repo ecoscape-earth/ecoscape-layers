@@ -186,7 +186,7 @@ class LayerGenerator(object):
             habs.append(HAB_308)
 
         if len(habs) == 0:
-            raise AssertionError("Habitat preferences for " + str(species_code) + " could not be found on the IUCN Red List. Habitat layer and resistance dictionary were not generated.")
+            raise AssertionError(f"Habitat preferences for {species_code} could not be found on the IUCN Red List. Habitat layer and resistance dictionary were not generated.")
 
 
         # Create the resistance table.
@@ -199,7 +199,7 @@ class LayerGenerator(object):
 
 
         if not os.path.isfile(range_fn):
-            raise FileNotFoundError("Range map could not be found for " + str(species_code) + " from " + ("IUCN") + ". Habitat layer was not generated.")
+            raise FileNotFoundError(f"Range map could not be found for {species_code} from the IUCN Habitat layer was not generated.")
 
         # Perform intersection between the range and habitable landcover.
         with GeoTiff.from_file(self.landcover_fn) as landcover:
