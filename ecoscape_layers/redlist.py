@@ -102,7 +102,7 @@ class RedList:
                 res[0]["elevation_upper"] or 10000,
             )
         
-    def generate_csv(self, name):
+    def generate_csv(self):
         """
         This function returns a list of all the species in the IUCN Redlist, in the form of a generated CSV file.
 
