@@ -47,18 +47,59 @@ class LayerGenerator(object):
         )
         self.iucn_range_src = iucn_range_src
 
-    def get_map_codes(self):
+    def get_map_codes(self, landcover: GeoTiff, output_path: str) -> list[int]:
         """
         Obtains the list of unique landcover map codes present in the landcover map.
         This is used to determine the map codes for which resistance values need to be defined.
+
+        :param landcover: The landcover map in GeoTiff format.
+        :param output_path: The path to the output directory for map codes.
         """
-        with GeoTiff.from_file(self.landcover_fn) as landcover:
-            tile = landcover.get_all_as_tile()
 
-            if tile is None:
-                raise ValueError("Landcover file is empty.")
+        # get the bounds of the landcover map
+        bounds = landcover.dataset.bounds
 
-            map_codes = sorted(list(np.unique(tile.m)))
+        # convert bounds to id num
+        bounds_id = hash(bounds)
+
+        # get the file name of the landcover map
+        landcover_fn_basename = os.path.basename(self.landcover_fn)
+        landcover_fn_basename = os.path.splitext(landcover_fn_basename)[0]
+
+        # add the bounds to the landcover file name
+        map_codes_id = f"{landcover_fn_basename}_{bounds_id}"
+
+        # create map codes file name
+        map_codes_fn = f"map_codes_{map_codes_id}.csv"
+
+        # create the full path to the map codes file
+        map_codes_output_path = os.path.join(output_path, map_codes_fn)
+
+        # check if the map codes file exists
+        if os.path.exists(map_codes_output_path):
+            # read the map codes file
+            with open(map_codes_output_path, "r") as csvfile:
+                reader = csv.reader(csvfile)
+                next(reader)
+                map_codes = [int(row[0]) for row in reader]
+
+            return map_codes
+
+        # get all unique map codes from the landcover map
+        tile = landcover.get_all_as_tile()
+
+        if tile is None:
+            raise ValueError("Landcover file is empty.")
+
+        map_codes: list[int] = sorted(list(np.unique(tile.m)))
+
+        # write the map codes to a file
+        with open(map_codes_output_path, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["map_code"])
+            for map_code in map_codes:
+                writer.writerow([map_code])
+
         return map_codes
 
     def get_range_from_iucn(
@@ -135,6 +176,7 @@ class LayerGenerator(object):
     def generate_resistance_table(
         self,
         habitats: list[dict[str, str | int | float]],
+        landcover: GeoTiff,
         output_path: str,
         refine_method: str,
     ):
@@ -145,13 +187,27 @@ class LayerGenerator(object):
         - All other terrain is assigned a resistance of 1.
 
         :param habitats: IUCN Red List habitat data for the species for which the table should be generated.
-        :param output_path: path of CSV file to which the species' resistance table should be saved.
+        :param landcover: GeoTiff object representing the landcover map.
+        :param output_path: Path of the CSV file to which the species' resistance table should be saved.
+        :param refine_method: Method used for refining the resistance values.
         """
+
+        # get the map codes output path. remove the file from path then add map_codes directory
+        map_codes_output_path = os.path.join(os.path.dirname(output_path), "map_codes")
+
+        # create the directory if it does not exist
+        if not os.path.exists(map_codes_output_path):
+            os.makedirs(map_codes_output_path)
+
+        # get the map codes
+        map_codes = self.get_map_codes(landcover, map_codes_output_path)
+
         with open(output_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(habitats[0].keys())
+
             # map codes from the landcover map
-            for map_code in self.get_map_codes():
+            for map_code in map_codes:
                 h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
@@ -269,26 +325,31 @@ class LayerGenerator(object):
                 f"Habitat preferences for {species_code} could not be found on the IUCN Red List. Habitat layer and resistance dictionary were not generated."
             )
 
-        # Create the resistance table.
-        self.generate_resistance_table(habs, resistance_dict_fn, refine_method)
-
-        # Obtain species range as either shapefile from IUCN or geopackage from eBird.
-        if range_src == "iucn":
-            if self.iucn_range_src is None:
-                raise ValueError(
-                    "No IUCN range source was specified. Habitat layer was not generated."
-                )
-            self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
-        else:
-            self.get_range_from_ebird(species_code, range_fn)
-
-        if not os.path.isfile(range_fn):
-            raise FileNotFoundError(
-                f"Range map could not be found for {species_code} from the {'IUCN' if range_src == 'iucn' else 'eBird'} Habitat layer was not generated."
-            )
-
         # Perform intersection between the range and habitable landcover.
         with GeoTiff.from_file(self.landcover_fn) as landcover:
+            # Create the resistance table.
+            self.generate_resistance_table(
+                habitats=habs,
+                landcover=landcover,
+                output_path=resistance_dict_fn,
+                refine_method=refine_method,
+            )
+
+            # Obtain species range as either shapefile from IUCN or geopackage from eBird.
+            if range_src == "iucn":
+                if self.iucn_range_src is None:
+                    raise ValueError(
+                        "No IUCN range source was specified. Habitat layer was not generated."
+                    )
+                self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
+            else:
+                self.get_range_from_ebird(species_code, range_fn)
+
+            if not os.path.isfile(range_fn):
+                raise FileNotFoundError(
+                    f"Range map could not be found for {species_code} from the {'IUCN' if range_src == 'iucn' else 'eBird'} Habitat layer was not generated."
+                )
+
             _, ext = os.path.splitext(range_fn)
             range_shapes = reproject_shapefile(
                 range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None
