@@ -302,9 +302,6 @@ class LayerGenerator(object):
         make_dirs_for_file(resistance_dict_fn)
         make_dirs_for_file(range_fn)
 
-        # replace spaces in species code with underscores
-        species_code = species_code.replace(" ", "_")
-
         # Obtain species habitat information from the IUCN Red List.
         if range_src == "iucn":
             sci_name = species_code
