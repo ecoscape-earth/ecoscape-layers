@@ -282,6 +282,11 @@ class LayerGenerator(object):
                     "eBird API key is required to get range maps from eBird."
                 )
 
+        if range_src == "iucn" and self.iucn_range_src is None:
+            raise ValueError(
+                "IUCN range source is required to get range maps from IUCN."
+            )
+
         if refine_list:
             refine_method = None
         elif refine_method not in REFINE_METHODS:
