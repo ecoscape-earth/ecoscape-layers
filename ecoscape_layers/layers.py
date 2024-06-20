@@ -54,6 +54,10 @@ class LayerGenerator(object):
         """
         with GeoTiff.from_file(self.landcover_fn) as landcover:
             tile = landcover.get_all_as_tile()
+
+            if tile is None:
+                raise ValueError("Landcover file is empty.")
+
             map_codes = sorted(list(np.unique(tile.m)))
         return map_codes
 
