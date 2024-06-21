@@ -104,7 +104,8 @@ class RedList:
         
     def generate_csv(self):
         """
-        This function returns a list of all the species in the IUCN Redlist, in the form of a generated CSV file.
+        This function returns a list of all the species in the IUCN Redlist, in the form of a generated CSV file. 
+        This function may require further calls to completely fill in all the pages. Currently being finalized, work in progress. 
 
         """
         url = "https://apiv3.iucnredlist.org/api/v3/species/page/{0}".format(name)

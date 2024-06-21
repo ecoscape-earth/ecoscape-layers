@@ -46,6 +46,7 @@ class LayerGenerator(object):
             None if elevation_fn is None else os.path.abspath(elevation_fn)
         )
         self.iucn_range_src = iucn_range_src
+        
 
     def get_map_codes(self):
         """
