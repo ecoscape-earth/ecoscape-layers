@@ -269,18 +269,8 @@ class LayerGenerator(object):
         :param refine_list: list of map codes for which the corresponding pixels should be considered habitat. Alternative to refine_method, which offers limited options. If both refine_method and refine_list are given, refine_list is prioritized.
         """
 
-        if range_src == "ebird":
-            # check if the species code is a scientific name when using eBird range source
-            if len(species_code) != 6:
-                raise ValueError(
-                    "When using range_src='ebird', species code should be a 6-letter eBird code."
-                )
-
-            # check if the ebird key is provided when using eBird range source
-            if self.ebird_key is None:
-                raise ValueError(
-                    "eBird API key is required to get range maps from eBird."
-                )
+        if range_src == "ebird" and self.ebird_key is None:
+            raise ValueError("eBird API key is required to get range maps from eBird.")
 
         if range_src == "iucn" and self.iucn_range_src is None:
             raise ValueError(
