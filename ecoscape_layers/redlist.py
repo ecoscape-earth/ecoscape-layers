@@ -54,9 +54,7 @@ class RedList:
         res = get_taxonomy(self.ebird_key, species=species_code)
         return res[0]["sciName"] if len(res) > 0 else None
 
-    def get_habitat_data(
-        self, name: str, region=None
-    ) -> list[dict[str, str | int | float]]:
+    def get_habitat_data(self, name: str, region=None) -> list[dict[str, str | int | float]]:
         """
         Gets habitat assessments for suitability for a given species.
         This also adds the associated landcover map's code and resistance value to the API response, which are useful for creating resistance mappings and/or habitat layers.
@@ -65,9 +63,7 @@ class RedList:
         :param region: a specific region to assess habitats in (see https://apiv3.iucnredlist.org/api/v3/docs#regions).
         :return: a list of habitats identified by the IUCN Red List as suitable for the species.
         """
-        url = "https://apiv3.iucnredlist.org/api/v3/habitats/species/name/{0}".format(
-            name
-        )
+        url = f"https://apiv3.iucnredlist.org/api/v3/habitats/species/name/{name}"
         if region is not None:
             url += "/region/{1}".format(region)
 

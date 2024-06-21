@@ -42,9 +42,7 @@ class LayerGenerator(object):
         self.redlist = RedList(redlist_key, ebird_key)
         self.ebird_key = ebird_key
         self.landcover_fn = os.path.abspath(landcover_fn)
-        self.elevation_fn = (
-            None if elevation_fn is None else os.path.abspath(elevation_fn)
-        )
+        self.elevation_fn = None if elevation_fn is None else os.path.abspath(elevation_fn)
         self.iucn_range_src = iucn_range_src
 
     def get_map_codes(self, landcover: GeoTiff, output_path: str) -> list[int]:
@@ -102,9 +100,7 @@ class LayerGenerator(object):
 
         return map_codes
 
-    def get_range_from_iucn(
-        self, species_name: str, input_ranges_gdb: str, output_path: str
-    ):
+    def get_range_from_iucn(self, species_name: str, input_ranges_gdb: str, output_path: str):
         """
         Using IUCN gdb file, creates shapefiles usable for refining ranges for specific species with GDAL's ogr module.
 
@@ -132,9 +128,7 @@ class LayerGenerator(object):
         # Create the output shapefile
         output_src = output_driver.CreateDataSource(output_path)
         output_layer_name = os.path.splitext(os.path.split(output_path)[1])[0]
-        output_layer = output_src.CreateLayer(
-            output_layer_name, geom_type=ogr.wkbMultiPolygon
-        )
+        output_layer = output_src.CreateLayer(output_layer_name, geom_type=ogr.wkbMultiPolygon)
 
         # Add fields to output
         for i in range(0, input_layer_defn.GetFieldCount()):
@@ -211,17 +205,11 @@ class LayerGenerator(object):
                 h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
-                        h["resistance"] = (
-                            0 if map_code >= 100 and map_code < 200 else h["resistance"]
-                        )
+                        h["resistance"] = 0 if map_code >= 100 and map_code < 200 else h["resistance"]
                     writer.writerow(h.values())
                 else:
                     if refine_method == "forest" or refine_method == "forest_add308":
-                        writer.writerow(
-                            [""] * 5
-                            + [map_code]
-                            + [0 if map_code >= 100 and map_code < 200 else 1]
-                        )
+                        writer.writerow([""] * 5 + [map_code] + [0 if map_code >= 100 and map_code < 200 else 1])
                     else:
                         writer.writerow([""] * 5 + [map_code] + [1])
 
@@ -240,13 +228,9 @@ class LayerGenerator(object):
         elif refine_method == "forest_add308":
             return [x for x in range(100, 110)] + [308]
         elif refine_method == "allsuitable":
-            return [
-                hab["map_code"] for hab in habitats if hab["suitability"] == "Suitable"
-            ]
+            return [hab["map_code"] for hab in habitats if hab["suitability"] == "Suitable"]
         elif refine_method == "majoronly":
-            return [
-                hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"
-            ]
+            return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
 
     def generate_habitat(
         self,
@@ -273,9 +257,7 @@ class LayerGenerator(object):
             raise ValueError("eBird API key is required to get range maps from eBird.")
 
         if range_src == "iucn" and self.iucn_range_src is None:
-            raise ValueError(
-                "IUCN range source is required to get range maps from IUCN."
-            )
+            raise ValueError("IUCN range source is required to get range maps from IUCN.")
 
         if refine_list:
             refine_method = None
@@ -286,9 +268,7 @@ class LayerGenerator(object):
         if habitat_fn is None:
             habitat_fn = os.path.join(os.getcwd(), species_code, "habitat.tif")
         if resistance_dict_fn is None:
-            resistance_dict_fn = os.path.join(
-                os.getcwd(), species_code, "resistance.csv"
-            )
+            resistance_dict_fn = os.path.join(os.getcwd(), species_code, "resistance.csv")
         if range_fn is None:
             range_fn = os.path.join(os.getcwd(), species_code, "range_map.gpkg")
 
@@ -303,16 +283,11 @@ class LayerGenerator(object):
         else:
             sci_name = self.redlist.get_scientific_name(species_code)
             if sci_name is None:
-                raise ValueError(
-                    f"Scientific name for eBird code '{species_code}' could not be found."
-                )
+                raise ValueError(f"Scientific name for eBird code '{species_code}' could not be found.")
 
         habs = self.redlist.get_habitat_data(sci_name)
 
-        if (
-            refine_method == "forest_add308"
-            and len([hab for hab in habs if hab["code"] == "3.8"]) == 0
-        ):
+        if refine_method == "forest_add308" and len([hab for hab in habs if hab["code"] == "3.8"]) == 0:
             habs.append(HAB_308)
 
         if len(habs) == 0:
@@ -333,9 +308,7 @@ class LayerGenerator(object):
             # Obtain species range as either shapefile from IUCN or geopackage from eBird.
             if range_src == "iucn":
                 if self.iucn_range_src is None:
-                    raise ValueError(
-                        "No IUCN range source was specified. Habitat layer was not generated."
-                    )
+                    raise ValueError("No IUCN range source was specified. Habitat layer was not generated.")
                 self.get_range_from_iucn(sci_name, self.iucn_range_src, range_fn)
             else:
                 self.get_range_from_ebird(species_code, range_fn)
@@ -346,29 +319,19 @@ class LayerGenerator(object):
                 )
 
             _, ext = os.path.splitext(range_fn)
-            range_shapes = reproject_shapefile(
-                range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None
-            )
+            range_shapes = reproject_shapefile(range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None)
 
             # Prepare range defined as shapes for masking
             if range_src == "iucn":
                 for s in range_shapes:
                     if s["geometry"]["type"] == "Polygon":
-                        s["geometry"]["coordinates"] = [
-                            [el[0] for el in s["geometry"]["coordinates"][0]]
-                        ]
-                shapes_for_mask = [
-                    unary_union([shape(s["geometry"]) for s in range_shapes])
-                ]
+                        s["geometry"]["coordinates"] = [[el[0] for el in s["geometry"]["coordinates"][0]]]
+                shapes_for_mask = [unary_union([shape(s["geometry"]) for s in range_shapes])]
             else:
                 shapes_for_mask = [shape(range_shapes[0]["geometry"])]
 
             # Define map codes for which corresponding pixels should be considered habitat
-            good_terrain_for_hab = (
-                refine_list
-                if refine_list is not None
-                else self.get_good_terrain(habs, refine_method)
-            )
+            good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
             # Create the habitat layer
             with landcover.clone_shape(habitat_fn) as output:
@@ -376,13 +339,7 @@ class LayerGenerator(object):
                 if self.elevation_fn is not None:
                     min_elev, max_elev = self.redlist.get_elevation(sci_name)
                     elev = GeoTiff.from_file(self.elevation_fn)
-                    cropped_window = (
-                        from_bounds(
-                            *output.dataset.bounds, transform=elev.dataset.transform
-                        )
-                        .round_lengths()
-                        .round_offsets(pixel_precision=0)
-                    )
+                    cropped_window = from_bounds(*output.dataset.bounds, transform=elev.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
                     x_offset, y_offset = cropped_window.col_off, cropped_window.row_off
 
                 reader = output.get_reader(b=0, w=10000, h=10000)
@@ -407,15 +364,9 @@ class LayerGenerator(object):
 
                     # mask out pixels not within elevation range (if elevation raster is provided)
                     if self.elevation_fn is not None:
-                        elev_window = Window(
-                            tile.x + x_offset, tile.y + y_offset, tile.w, tile.h
-                        )
+                        elev_window = Window(tile.x + x_offset, tile.y + y_offset, tile.w, tile.h)
                         elev_window_data = elev.dataset.read(window=elev_window)
-                        window_data = (
-                            window_data
-                            & (elev_window_data >= min_elev)
-                            & (elev_window_data <= max_elev)
-                        )
+                        window_data = window_data & (elev_window_data >= min_elev) & (elev_window_data <= max_elev)
 
                     # write the window result
                     output.dataset.write(window_data, window=window)
@@ -465,9 +416,7 @@ def warp(
         padded_bounds = None
 
     input_name = os.path.basename(input)
-    progress = tqdm.tqdm(
-        total=100, desc=f"Warping ({input_name})", unit="%", position=0
-    )
+    progress = tqdm.tqdm(total=100, desc=f"Warping ({input_name})", unit="%", position=0)
 
     def _progress_callback(complete, message, data):
         progress.update(int(complete * 100 - progress.n))
