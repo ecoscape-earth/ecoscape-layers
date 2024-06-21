@@ -153,14 +153,10 @@ class LayerGenerator(object):
     def get_range_from_ebird(self, species_code: str, output_path: str):
         """
         Gets range map in geopackage (.gpkg) format for a given bird species.
+
         :param species_code: 6-letter eBird code for a bird species.
         :param output_path: path to write the range map to.
         """
-
-        # check if the species code is a scientific name
-        if len(species_code) != 6:
-            raise ValueError("Species code should be a 6-letter eBird code.")
-
         req_url = f"https://st-download.ebird.org/v1/fetch?objKey=2022/{species_code}/ranges/{species_code}_range_smooth_9km_2022.gpkg&key={self.ebird_key}"
         res = requests.get(req_url)
         if res.status_code == 200:
@@ -314,9 +310,8 @@ class LayerGenerator(object):
                 self.get_range_from_ebird(species_code, range_fn)
 
             if not os.path.isfile(range_fn):
-                raise FileNotFoundError(
-                    f"Range map could not be found for {species_code} from the {'IUCN' if range_src == 'iucn' else 'eBird'} Habitat layer was not generated."
-                )
+                src = "IUCN" if range_src == "iucn" else "eBird"
+                raise FileNotFoundError(f"Range map could not be found for {species_code} from the {src} Habitat layer was not generated.")
 
             _, ext = os.path.splitext(range_fn)
             range_shapes = reproject_shapefile(range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None)
