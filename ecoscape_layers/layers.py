@@ -45,7 +45,7 @@ class LayerGenerator(object):
         self.elevation_fn = None if elevation_fn is None else os.path.abspath(elevation_fn)
         self.iucn_range_src = iucn_range_src
 
-    def get_map_codes(self, landcover: GeoTiff, output_path: str) -> list[int]:
+    def get_map_codes(self, landcover: GeoTiff) -> list[int]:
         """
         Obtains the list of unique landcover map codes present in the landcover map.
         This is used to determine the map codes for which resistance values need to be defined.
@@ -70,8 +70,12 @@ class LayerGenerator(object):
         # create map codes file name
         map_codes_fn = f"map_codes_{map_codes_id}.csv"
 
+        # create map codes directory
+        map_codes_dir = os.path.join(os.path.dirname(self.landcover_fn), "map_codes")
+        os.makedirs(map_codes_dir, exist_ok=True)
+
         # create the full path to the map codes file
-        map_codes_output_path = os.path.join(output_path, map_codes_fn)
+        map_codes_output_path = os.path.join(map_codes_dir, map_codes_fn)
 
         # check if the map codes file exists
         if os.path.exists(map_codes_output_path):
@@ -182,15 +186,8 @@ class LayerGenerator(object):
         :param refine_method: Method used for refining the resistance values.
         """
 
-        # get the map codes output path. remove the file from path then add map_codes directory
-        map_codes_output_path = os.path.join(os.path.dirname(output_path), "map_codes")
-
-        # create the directory if it does not exist
-        if not os.path.exists(map_codes_output_path):
-            os.makedirs(map_codes_output_path)
-
         # get the map codes
-        map_codes = self.get_map_codes(landcover, map_codes_output_path)
+        map_codes = self.get_map_codes(landcover)
 
         with open(output_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
