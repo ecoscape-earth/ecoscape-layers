@@ -54,7 +54,9 @@ class RedList:
         res = get_taxonomy(self.ebird_key, species=species_code)
         return res[0]["sciName"] if len(res) > 0 else None
 
-    def get_habitat_data(self, name: str, region=None) -> list[dict[str, str | int | float]]:
+    def get_habitat_data(
+        self, name: str, region=None
+    ) -> list[dict[str, str | int | float]]:
         """
         Gets habitat assessments for suitability for a given species.
         This also adds the associated landcover map's code and resistance value to the API response, which are useful for creating resistance mappings and/or habitat layers.
@@ -85,7 +87,7 @@ class RedList:
         Obtain elevation bounds that are suitable for a given species
         :param name: scientific name of the species
         """
-        url = "https://apiv3.iucnredlist.org/api/v3/species/{0}".format(name)
+        url = f"https://apiv3.iucnredlist.org/api/v3/species/{name}"
         res = self.get_from_redlist(url)
 
         if len(res) == 0:

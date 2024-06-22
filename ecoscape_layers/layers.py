@@ -209,7 +209,7 @@ class LayerGenerator(object):
                     else:
                         writer.writerow([""] * 5 + [map_code] + [1])
 
-    def get_good_terrain(self, habitats, refine_method="forest_add308"):
+    def get_good_terrain(self, habitats, refine_method="forest_add308") -> list[int]:
         """
         Determine the terrain deemed suitable for habitat based on the refining method.
         This decides what map codes from the landcover should be used to filter the habitat.
@@ -227,6 +227,8 @@ class LayerGenerator(object):
             return [hab["map_code"] for hab in habitats if hab["suitability"] == "Suitable"]
         elif refine_method == "majoronly":
             return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
+        else:
+            return []
 
     def generate_habitat(
         self,
@@ -326,7 +328,7 @@ class LayerGenerator(object):
                 shapes_for_mask = [shape(range_shapes[0]["geometry"])]
 
             # Define map codes for which corresponding pixels should be considered habitat
-            good_terrain_for_hab = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
+            good_terrain_for_hab: list[int] = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
 
             # Create the habitat layer
             with landcover.clone_shape(habitat_fn) as output:
