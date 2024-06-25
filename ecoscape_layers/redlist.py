@@ -67,7 +67,7 @@ class RedList:
         """
         url = f"https://apiv3.iucnredlist.org/api/v3/habitats/species/name/{name}"
         if region is not None:
-            url += "/region/{1}".format(region)
+            url += f"/region/{region}"
 
         habs = self.get_from_redlist(url)
 
