@@ -1,6 +1,7 @@
 import csv
 import numpy as np
 import os
+from numpy.distutils.fcompiler.none import NoneFCompiler
 import requests
 from rasterio import features
 from rasterio.windows import Window, from_bounds
@@ -51,7 +52,6 @@ class LayerGenerator(object):
         This is used to determine the map codes for which resistance values need to be defined.
 
         :param landcover: The landcover map in GeoTiff format.
-        :param output_path: The path to the output directory for map codes.
         """
 
         # get the bounds of the landcover map
@@ -166,6 +166,11 @@ class LayerGenerator(object):
         if res.status_code == 200:
             with open(output_path, "wb") as res_file:
                 res_file.write(res.content)
+        else:
+            raise requests.HTTPError(
+                f"Failed to download range map for {species_code} from eBird API. "
+                + "Your eBird API key may be expired or invalid."
+            )
 
     def generate_resistance_table(
         self,
@@ -252,7 +257,7 @@ class LayerGenerator(object):
             raise ValueError("eBird API key is required to get range maps from eBird.")
 
         if range_src == "iucn" and self.iucn_range_src is None:
-            raise ValueError("IUCN range source is required to get range maps from IUCN.")
+            raise ValueError("iucn_range_src is required when range_src == 'iucn'.")
 
         if refine_list:
             refine_method = None
@@ -260,12 +265,13 @@ class LayerGenerator(object):
             refine_method = "forest"
 
         # If file names not specified, build default ones.
+        cwd = os.getcwd()
         if habitat_fn is None:
-            habitat_fn = os.path.join(os.getcwd(), species_code, "habitat.tif")
+            habitat_fn = os.path.join(cwd, species_code, "habitat.tif")
         if resistance_dict_fn is None:
-            resistance_dict_fn = os.path.join(os.getcwd(), species_code, "resistance.csv")
+            resistance_dict_fn = os.path.join(cwd, species_code, "resistance.csv")
         if range_fn is None:
-            range_fn = os.path.join(os.getcwd(), species_code, "range_map.gpkg")
+            range_fn = os.path.join(cwd, species_code, "range_map.gpkg")
 
         # Ensure that directories to habitat layer, range map, and resistance dictionary exist.
         make_dirs_for_file(habitat_fn)
@@ -278,7 +284,8 @@ class LayerGenerator(object):
         else:
             sci_name = self.redlist.get_scientific_name(species_code)
             if sci_name is None:
-                raise ValueError(f"Scientific name for eBird code '{species_code}' could not be found.")
+                error_msg = f"Scientific name for eBird code '{species_code}' could not be found."
+                raise ValueError(error_msg)
 
         habs = self.redlist.get_habitat_data(sci_name)
 
@@ -287,7 +294,8 @@ class LayerGenerator(object):
 
         if len(habs) == 0:
             raise AssertionError(
-                f"Habitat preferences for {species_code} could not be found on the IUCN Red List. Habitat layer and resistance dictionary were not generated."
+                f"Habitat preferences for {species_code} could not be found on the IUCN Red List. "
+                + "Habitat layer and resistance dictionary were not generated."
             )
 
         # Perform intersection between the range and habitable landcover.
@@ -310,7 +318,8 @@ class LayerGenerator(object):
 
             if not os.path.isfile(range_fn):
                 src = "IUCN" if range_src == "iucn" else "eBird"
-                raise FileNotFoundError(f"Range map could not be found for {species_code} from the {src} Habitat layer was not generated.")
+                error_msg = f"Range map could not be found for {species_code} from {src}."
+                raise FileNotFoundError(error_msg)
 
             _, ext = os.path.splitext(range_fn)
             range_shapes = reproject_shapefile(range_fn, landcover.dataset.crs, "range" if ext == ".gpkg" else None)
@@ -325,7 +334,10 @@ class LayerGenerator(object):
                 shapes_for_mask = [shape(range_shapes[0]["geometry"])]
 
             # Define map codes for which corresponding pixels should be considered habitat
-            good_terrain_for_hab: list[int] = refine_list if refine_list is not None else self.get_good_terrain(habs, refine_method)
+            if refine_list is None:
+                good_terrain_for_hab = self.get_good_terrain(habs, refine_method)
+            else:
+                good_terrain_for_hab = refine_list
 
             # Create the habitat layer
             with landcover.clone_shape(habitat_fn) as output:
@@ -333,7 +345,11 @@ class LayerGenerator(object):
                 if self.elevation_fn is not None:
                     min_elev, max_elev = self.redlist.get_elevation(sci_name)
                     elev = GeoTiff.from_file(self.elevation_fn)
-                    cropped_window = from_bounds(*output.dataset.bounds, transform=elev.dataset.transform).round_lengths().round_offsets(pixel_precision=0)
+                    cropped_window = (
+                        from_bounds(*output.dataset.bounds, transform=elev.dataset.transform)
+                        .round_lengths()
+                        .round_offsets(pixel_precision=0)
+                    )
                     x_offset, y_offset = cropped_window.col_off, cropped_window.row_off
 
                 reader = output.get_reader(b=0, w=10000, h=10000)
