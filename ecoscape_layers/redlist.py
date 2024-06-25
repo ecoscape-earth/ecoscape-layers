@@ -15,7 +15,7 @@ class RedList:
         self.redlist_params = {"token": redlist_key}
         self.ebird_key = ebird_key
 
-    def get_from_redlist(self, url) -> list[dict[str, str | int | float]]:
+    def get_from_redlist(self, url):
         """
         Convenience function for sending GET request to Red List API with the key.
 
