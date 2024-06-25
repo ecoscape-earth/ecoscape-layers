@@ -50,13 +50,13 @@ Once you have the landcover matrix layer prepared, a `LayerGenerator` instance m
 
 - `elevation_fn`: path to optional elevation raster for filtering habitats by species elevation. If not specified, elevation will not be considered in the creation of habitat layers.
 
-- `iucn_range_src`: path to optional IUCN dataset of ranges for bird species. Refer to Setup for how to obtain this if needed. This is not required if `range_src` will be set "ebird".
+- `iucn_range_src`: path to optional IUCN dataset of ranges for bird species. Refer to Setup for how to obtain this if needed. This is not required if `range_src` is set to "ebird".
 
 - `ebird_key`: eBird API key. This is not required if `range_src` is set to "iucn".
 
 You can then use the `generate_habitat` method to produce a habitat layer for a given bird species based on range map data, terrain preferences, and elevation if specified in the constructor. This method takes parameters:
 
-- `species_code`: If `range_src` is set to "iucn" then use the scientific name for the bird species. If `range_src` is set to "ebird" 6-letter eBird code of the species for which habitat layers should be generated. This can be found by looking up the species on eBird and taking the 6-letter code found at the end of the species page's URL.
+- `species_code`: If `range_src` is set to "iucn", then use the scientific name for the bird species. If `range_src` is set to "ebird", then use instead the 6-letter eBird code of the species for which habitat layers should be generated. This can be found by looking up the species on eBird and taking the 6-letter code found at the end of the species page's URL.
 
 - `habitat_fn`: name of output habitat layer.
 
@@ -76,7 +76,5 @@ You can then use the `generate_habitat` method to produce a habitat layer for a 
 - `refine_list`: list of map codes for which the corresponding pixels should be considered habitat. This is provided as an alternative to refine_method, which offers limited options. This overrides refine_method if both refine_method and refine_list are specified.
 
 ## Known issues
-
-- The eBird and IUCN Red List scientific names do not match for certain bird species, such as the white-headed woodpecker (eBird code: `whhwoo`). As the IUCN Red List API only accepts scientific names for its API queries, if this occurs for a bird species, the 6-letter eBird species code for the species must be manually matched to the corresponding scientific name from the IUCN Red List.
 
 - Migratory bird species and bird species with seasonal ranges are currently _not_ supported.
