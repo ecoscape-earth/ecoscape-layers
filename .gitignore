@@ -5,6 +5,7 @@ inputs/*
 outputs/*
 tests/inputs/*
 tests/outputs/*
+tests/data/*
 tests/config.py
 
 !tests/inputs/test_species_list.txt
