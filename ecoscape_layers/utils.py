@@ -64,8 +64,8 @@ def transform_box(
     min_lat: float,
     max_lon: float,
     max_lat: float,
+    crs_in: str,
     crs_out: str,
-    crs_in: str = "EPSG:4326",
 ):
     """
     Transforms a bounding box from one coordinate reference system (CRS) to another.
@@ -75,8 +75,8 @@ def transform_box(
         min_lat (float): The minimum latitude of the bounding box.
         max_lon (float): The maximum longitude of the bounding box.
         max_lat (float): The maximum latitude of the bounding box.
-        crs_out (str): The output CRS in EPSG format.
-        crs_in (str): The input CRS in EPSG format.
+        crs_in (str): The input CRS in EPSG format. For example "EPSG:4326".
+        crs_out (str): The output CRS in EPSG format. For example "EPSG:3395".
 
     Returns:
         tuple: A tuple containing the transformed coordinates of the bounding box in the output CRS.
