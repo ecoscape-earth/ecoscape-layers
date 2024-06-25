@@ -12,13 +12,13 @@ To use the package, you will need:
 
 - If you would like to use range maps from the IUCN Red List, you will need to obtain a copy of the dataset in geodatabase format from http://datazone.birdlife.org/species/requestdis. This can then be passed in as an input to the package. Range maps from the IUCN Red List are generally available for birds around the world, which gives more freedom to experiment with birds that are not in the US compared to using eBird range maps.
 
-The initial landcover raster that we use to produce our layers originates from a global map produced by [Jung et al.](https://doi.org/10.1038/s41597-020-00599-8) and is available for download at https://zenodo.org/record/4058819 (iucn_habitatclassification_composite_lvl2_ver004.zip). It follows the [IUCN Red List Habitat Classification Scheme](https://www.iucnredlist.org/resources/habitat-classification-scheme).
+- The initial landcover raster that we use to produce our layers originates from a global map produced by [Jung et al.](https://doi.org/10.1038/s41597-020-00599-8) and is available for download at https://zenodo.org/record/4058819 (iucn_habitatclassification_composite_lvl2_ver004.zip). It follows the [IUCN Red List Habitat Classification Scheme](https://www.iucnredlist.org/resources/habitat-classification-scheme).
 
 ## Usage
 
 This package is used as a module. Use the `warp` function in `layers.py` as needed to produce the landcover matrix layer and/or elevation raster with the desired parameters/bounds. The class `LayerGenerator` in `layers.py` can then be used to create corresponding habitat layers for various bird species.
 
-Refer to `tests/test_layers.ipynb` for a simple example of how to use the package to produce landcover matrix layers and habitat layers.
+Refer to [tests/test_layers.ipynb](./tests/test_layers.ipynb) for a simple example of how to use the package to produce landcover matrix layers and habitat layers.
 
 ### Preparing the landcover matrix layer
 
@@ -29,7 +29,8 @@ The `warp` function is used for reprojecting, rescaling, and/or cropping a raste
 - `output`: name of the processed raster.
 
 - `crs`: desired common CRS of the outputted layers as an ESRI WKT string, or None to use the CRS of the input landcover raster.
-    - <b>Note</b>: if the ESRI WKT string contains double quotes that are ignored when the string is given as a command line argument, use single quotes in place of double quotes.
+
+  - <b>Note</b>: if the ESRI WKT string contains double quotes that are ignored when the string is given as a command line argument, use single quotes in place of double quotes.
 
 - `resolution`: desired resolution in the units of the chosen CRS, or None to use the resolution of the input landcover raster.
 
@@ -45,17 +46,17 @@ Once you have the landcover matrix layer prepared, a `LayerGenerator` instance m
 
 - `redlist_key`: IUCN Red List API key.
 
-- `ebird_key`: eBird API key.
-
 - `landcover_fn`: path to landcover matrix raster. Habitat layers produced under the instance will take on the projection, resolution, and bounds of the landcover matrix raster.
 
 - `elevation_fn`: path to optional elevation raster for filtering habitats by species elevation. If not specified, elevation will not be considered in the creation of habitat layers.
 
-- `iucn_range_src`: path to optional IUCN dataset of ranges for bird species. Refer to Setup for how to obtain this if needed.
+- `iucn_range_src`: path to optional IUCN dataset of ranges for bird species. Refer to Setup for how to obtain this if needed. This is not required if `range_src` will be set "ebird".
+
+- `ebird_key`: eBird API key. This is not required if `range_src` is set to "iucn".
 
 You can then use the `generate_habitat` method to produce a habitat layer for a given bird species based on range map data, terrain preferences, and elevation if specified in the constructor. This method takes parameters:
 
-- `species_code`: 6-letter eBird code of the species for which habitat layers should be generated. This can be found by looking up the species on eBird and taking the 6-letter code found at the end of the species page's URL.
+- `species_code`: If `range_src` is set to "iucn" then use the scientific name for the bird species. If `range_src` is set to "ebird" 6-letter eBird code of the species for which habitat layers should be generated. This can be found by looking up the species on eBird and taking the 6-letter code found at the end of the species page's URL.
 
 - `habitat_fn`: name of output habitat layer.
 
@@ -63,13 +64,14 @@ You can then use the `generate_habitat` method to produce a habitat layer for a 
 
 - `range_fn`: name of output range map for the species, which is downloaded from eBird or extracted from `iucn_range_src` as an intermediate step for producing the habitat layer. Based on the source, the type of file returned differs; this should end in `.gpkg` if `range_src` is "ebird" and `.shp` if `range_src` is "iucn".
 
-- `range_src`: source from which to obtain range maps; one of "ebird" or "iucn". If "iucn" is specified, then `iucn_range_src` from the constructor must be specified also.
+- `range_src`: source from which to obtain range maps; one of "ebird" or "iucn". If "iucn" is specified, then `iucn_range_src` from the constructor must be specified also. If "ebird" is specified then the `ebird_key` from the constructor must be specified.
 
 - `refine_method`: method by which habitat pixels should be selected when creating a habitat layer.
-    - `forest`: selects all forest pixels.
-    - `forest_add308`: selects all forest pixels and pixels with code "308" (Shrubland – Mediterranean-type shrubby vegetation).
-    - `allsuitable`: selects all pixels with landcover deemed suitable for the species, as determined by the IUCN Red List.
-    - `majoronly`: selects all pixels with landcover deemed of major importance to the species, as determined by the IUCN Red List.
+
+  - `forest`: selects all forest pixels.
+  - `forest_add308`: selects all forest pixels and pixels with code "308" (Shrubland – Mediterranean-type shrubby vegetation).
+  - `allsuitable`: selects all pixels with landcover deemed suitable for the species, as determined by the IUCN Red List.
+  - `majoronly`: selects all pixels with landcover deemed of major importance to the species, as determined by the IUCN Red List.
 
 - `refine_list`: list of map codes for which the corresponding pixels should be considered habitat. This is provided as an alternative to refine_method, which offers limited options. This overrides refine_method if both refine_method and refine_list are specified.
 
@@ -77,4 +79,4 @@ You can then use the `generate_habitat` method to produce a habitat layer for a 
 
 - The eBird and IUCN Red List scientific names do not match for certain bird species, such as the white-headed woodpecker (eBird code: `whhwoo`). As the IUCN Red List API only accepts scientific names for its API queries, if this occurs for a bird species, the 6-letter eBird species code for the species must be manually matched to the corresponding scientific name from the IUCN Red List.
 
-- Migratory bird species and bird species with seasonal ranges are currently *not* supported.
+- Migratory bird species and bird species with seasonal ranges are currently _not_ supported.

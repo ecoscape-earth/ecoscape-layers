@@ -16,32 +16,36 @@ def reproject_shapefile(shapes_path, dest_crs, shapes_layer=None, file_path=None
 
     myfeatures = []
 
-    with fiona.open(shapes_path, 'r', layer=shapes_layer) as shp:
+    with fiona.open(shapes_path, "r", layer=shapes_layer) as shp:
         # create a Transformer for changing from the current CRS to the destination CRS
-        transformer = Transformer.from_crs(crs_from=shp.crs_wkt, crs_to=dest_crs, always_xy=True)
+        transformer = Transformer.from_crs(
+            crs_from=shp.crs_wkt, crs_to=dest_crs, always_xy=True
+        )
 
         # loop through polygons in each features, transforming all point coordinates within those polygons
         for feature in shp:
-            for i, polygon in enumerate(feature['geometry']['coordinates']):
+            for i, polygon in enumerate(feature["geometry"]["coordinates"]):
                 for j, ring in enumerate(polygon):
                     if isinstance(ring, list):
-                        feature['geometry']['coordinates'][i][j] = [transformer.transform(*point) for point in ring]
+                        feature["geometry"]["coordinates"][i][j] = [
+                            transformer.transform(*point) for point in ring
+                        ]
                     else:
                         # "ring" is really just a single point
-                        feature['geometry']['coordinates'][i][j] = [transformer.transform(*ring)]
+                        feature["geometry"]["coordinates"][i][j] = [
+                            transformer.transform(*ring)
+                        ]
             myfeatures.append(feature)
 
         # if file_path is specified, write the result to a new shapefile
         if file_path is not None:
             meta = shp.meta
-            meta.update({
-                'driver': 'ESRI Shapefile',
-                'crs_wkt': dest_crs
-            })
-            with fiona.open(file_path, 'w', **meta) as output:
+            meta.update({"driver": "ESRI Shapefile", "crs_wkt": dest_crs})
+            with fiona.open(file_path, "w", **meta) as output:
                 output.writerecords(myfeatures)
 
     return myfeatures
+
 
 def make_dirs_for_file(file_name):
     """
@@ -53,3 +57,37 @@ def make_dirs_for_file(file_name):
     """
     dirs, _ = os.path.split(file_name)
     os.makedirs(dirs, exist_ok=True)
+
+
+def transform_box(
+    min_lon: float,
+    min_lat: float,
+    max_lon: float,
+    max_lat: float,
+    crs_out: str,
+    crs_in: str = "EPSG:4326",
+):
+    """
+    Transforms a bounding box from one coordinate reference system (CRS) to another.
+
+    Args:
+        min_lon (float): The minimum longitude of the bounding box.
+        min_lat (float): The minimum latitude of the bounding box.
+        max_lon (float): The maximum longitude of the bounding box.
+        max_lat (float): The maximum latitude of the bounding box.
+        crs_out (str): The output CRS in EPSG format.
+        crs_in (str): The input CRS in EPSG format.
+
+    Returns:
+        tuple: A tuple containing the transformed coordinates of the bounding box in the output CRS.
+        The tuple has the format (min_x, min_y, max_x, max_y).
+    """
+
+    # Define in and out projections
+    in_proj = Transformer.from_crs(crs_in, crs_out)
+
+    # Transform corner points individually
+    min_x, min_y = in_proj.transform(min_lat, min_lon)
+    max_x, max_y = in_proj.transform(max_lat, max_lon)
+
+    return min_x, min_y, max_x, max_y
