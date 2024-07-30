@@ -1,7 +1,6 @@
 import csv
 import numpy as np
 import os
-from numpy.distutils.fcompiler.none import NoneFCompiler
 import requests
 from rasterio import features
 from rasterio.windows import Window, from_bounds
