@@ -157,7 +157,7 @@ class LayerGenerator(object):
 
         # get the map codes
         # using range 2000 as this is all available map codes
-        map_codes = list(range(2000))
+        map_codes = range(2000)
 
         with open(output_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
