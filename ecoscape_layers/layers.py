@@ -15,6 +15,7 @@ from .utils import reproject_shapefile, make_dirs_for_file
 
 import tqdm
 import psutil
+from itertools import chain
 
 
 class LayerGenerator(object):
@@ -53,53 +54,17 @@ class LayerGenerator(object):
         :param landcover: The landcover map in GeoTiff format.
         """
 
-        # get the bounds of the landcover map
-        bounds = landcover.dataset.bounds
-
-        # convert bounds to id num
-        bounds_id = hash(bounds)
-
-        # get the file name of the landcover map
-        landcover_fn_basename = os.path.basename(self.landcover_fn)
-        landcover_fn_basename = os.path.splitext(landcover_fn_basename)[0]
-
-        # add the bounds to the landcover file name
-        map_codes_id = f"{landcover_fn_basename}_{bounds_id}"
-
-        # create map codes file name
-        map_codes_fn = f"map_codes_{map_codes_id}.csv"
-
-        # create map codes directory
-        map_codes_dir = os.path.join(os.path.dirname(self.landcover_fn), "map_codes")
-        os.makedirs(map_codes_dir, exist_ok=True)
-
-        # create the full path to the map codes file
-        map_codes_output_path = os.path.join(map_codes_dir, map_codes_fn)
-
-        # check if the map codes file exists
-        if os.path.exists(map_codes_output_path):
-            # read the map codes file
-            with open(map_codes_output_path, "r") as csvfile:
-                reader = csv.reader(csvfile)
-                next(reader)
-                map_codes = [int(row[0]) for row in reader]
-
-            return map_codes
-
         # get all unique map codes from the landcover map
         tile = landcover.get_all_as_tile()
 
         if tile is None:
             raise ValueError("Landcover file is empty.")
 
-        map_codes: list[int] = sorted(list(np.unique(tile.m)))
+        # get map data from tile.m as a numpy matrix
+        map_data: np.ndarray = tile.m
 
-        # write the map codes to a file
-        with open(map_codes_output_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(["map_code"])
-            for map_code in map_codes:
-                writer.writerow([map_code])
+        # get unique map codes
+        map_codes: list[int] = sorted(list(set(chain(map_data.flatten()))))
 
         return map_codes
 
@@ -191,7 +156,8 @@ class LayerGenerator(object):
         """
 
         # get the map codes
-        map_codes = self.get_map_codes(landcover)
+        # using range 2000 as this is all available map codes
+        map_codes = list(range(2000))
 
         with open(output_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
