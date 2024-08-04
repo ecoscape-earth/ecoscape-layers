@@ -255,9 +255,9 @@ class LayerGenerator(object):
             return codes
 
         if refine_method == "forest":
-            return [x for x in range(100, 110)]
+            return comb_ranges(self.FORESTS)
         elif refine_method == "forest_add308":
-            return [x for x in range(100, 110)] + [308]
+            return comb_ranges(self.FORESTS) + [308]
         elif refine_method == "forest_africa":
             hab_ranges = comb_ranges(self.FORESTS, self.SHRUBLANDS, self.INTRODUCED_VEGETATION)
             return list(set(hab_ranges + suit_hab + maj_hab))
