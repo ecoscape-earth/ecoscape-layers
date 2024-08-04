@@ -1,7 +1,6 @@
 import csv
 import numpy as np
 import os
-from numpy.distutils.fcompiler.none import NoneFCompiler
 import requests
 from rasterio import features
 from rasterio.windows import Window, from_bounds
@@ -23,6 +22,26 @@ class LayerGenerator(object):
     For things like reprojecting, building resistance tables, and creating habitat layers and landcover matrix layers.
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
+
+    # IUCN map code ranges
+    # NOTE: These codes can be found on https://www.iucnredlist.org/resources/habitat-classification-scheme
+    FORESTS = (100, 200)
+    SAVANNAS = (200, 300)
+    SHRUBLANDS = (300, 400)
+    GRASSLANDS = (400, 500)
+    WETLANDS = (500, 600)
+    ROCKY = (600, 700)
+    CAVES = (700, 800)
+    DESERTS = (800, 900)
+    MARINE_NERITIC = (900, 1000)
+    MARINE_OCEANIC = (1000, 1100)
+    MARINE_DEEP = (1100, 1200)
+    MARINE_INTERTIDAL = (1200, 1300)
+    MARINE_COSTAL = (1300, 1400)
+    ARTIFICIAL = (1400, 1600)
+    INTRODUCED_VEGETATION = (1600, 1700)
+    OTHER = (1700, 1800)
+    UNKNOWN = (1800, 1900)
 
     def __init__(
         self,
@@ -201,13 +220,50 @@ class LayerGenerator(object):
             # map codes from the landcover map
             for map_code in map_codes:
                 h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
+
+                # check if in at least one of multiple habitat ranges
+                def in_hab(*ranges: tuple[int, int]) -> bool:
+                    return any((r[0] <= map_code < r[1]) for r in ranges)
+
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
-                        h["resistance"] = 0 if map_code >= 100 and map_code < 200 else h["resistance"]
+                        h["resistance"] = 0 if in_hab(self.FORESTS) else h["resistance"]
+                    elif refine_method == "forest_africa":
+                        # will have the forest and shrublands set to 0 regardless of the habitat data
+                        h["resistance"] = 0 if in_hab(self.FORESTS, self.SHRUBLANDS) else h["resistance"]
+
                     writer.writerow(h.values())
                 else:
                     if refine_method == "forest" or refine_method == "forest_add308":
-                        writer.writerow([""] * 5 + [map_code] + [0 if map_code >= 100 and map_code < 200 else 1])
+                        writer.writerow([""] * 5 + [map_code] + [0 if in_hab(self.FORESTS) else 1])
+                    elif refine_method == "forest_africa":
+                        resistance = 1
+                        if in_hab(self.FORESTS, self.SHRUBLANDS):
+                            resistance = 0
+                        elif in_hab(self.INTRODUCED_VEGETATION):
+                            resistance = 0.1
+                        elif in_hab(
+                            self.SAVANNAS,
+                            self.GRASSLANDS,
+                            self.WETLANDS,
+                            self.ROCKY,
+                            self.CAVES,
+                            self.OTHER,
+                            self.UNKNOWN,
+                        ):
+                            resistance = 0.9
+                        elif in_hab(
+                            self.DESERTS,
+                            self.MARINE_NERITIC,
+                            self.MARINE_OCEANIC,
+                            self.MARINE_DEEP,
+                            self.MARINE_INTERTIDAL,
+                            self.MARINE_COSTAL,
+                            self.ARTIFICIAL,
+                        ):
+                            resistance = 1
+
+                        writer.writerow([""] * 5 + [map_code] + [resistance])
                     else:
                         writer.writerow([""] * 5 + [map_code] + [1])
 
@@ -221,14 +277,28 @@ class LayerGenerator(object):
         :return: list of map codes filtered by refine_method.
         """
 
+        # Predefine good terrain map codes
+        suit_hab = [h["map_code"] for h in habitats if h["suitability"] == "Suitable"]
+        maj_hab = [h["map_code"] for h in habitats if h["majorimportance"] == "Yes"]
+
+        # function to combine ranges from range function
+        def comb_ranges(*ranges: tuple[int, int]) -> list[int]:
+            codes = []
+            for r in ranges:
+                codes.extend(list(range(r[0], r[1])))
+            return codes
+
         if refine_method == "forest":
             return [x for x in range(100, 110)]
         elif refine_method == "forest_add308":
             return [x for x in range(100, 110)] + [308]
+        elif refine_method == "forest_africa":
+            hab_ranges = comb_ranges(self.FORESTS, self.SHRUBLANDS, self.INTRODUCED_VEGETATION)
+            return list(set(hab_ranges + suit_hab + maj_hab))
         elif refine_method == "allsuitable":
-            return [hab["map_code"] for hab in habitats if hab["suitability"] == "Suitable"]
+            return suit_hab
         elif refine_method == "majoronly":
-            return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
+            return maj_hab
         else:
             return []
 
