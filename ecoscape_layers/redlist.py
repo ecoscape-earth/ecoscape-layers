@@ -15,7 +15,7 @@ class RedList:
         self.redlist_params = {"token": redlist_key}
         self.ebird_key = ebird_key
 
-    def get_from_redlist(self, url) -> list[dict[str, str | int | float]]:
+    def get_from_redlist(self, url):
         """
         Convenience function for sending GET request to Red List API with the key.
 
@@ -67,7 +67,7 @@ class RedList:
         """
         url = f"https://apiv3.iucnredlist.org/api/v3/habitats/species/name/{name}"
         if region is not None:
-            url += "/region/{1}".format(region)
+            url += f"/region/{region}"
 
         habs = self.get_from_redlist(url)
 
