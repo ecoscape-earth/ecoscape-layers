@@ -1,7 +1,6 @@
 import csv
 import numpy as np
 import os
-from numpy.distutils.fcompiler.none import NoneFCompiler
 import requests
 from rasterio import features
 from rasterio.windows import Window, from_bounds
@@ -195,21 +194,24 @@ class LayerGenerator(object):
         map_codes = self.get_map_codes(landcover)
 
         with open(output_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(habitats[0].keys())
-
+            writer = csv.DictWriter(csvfile, fieldnames=habitats[0].keys())
+            writer.writeheader()
             # map codes from the landcover map
             for map_code in map_codes:
+                # TODO: This is bad in two ways. 
+                # First, it somehow assumes an order of the stuff in habitats?  But why? 
+                # Can't we just do a .get in the dictionary, doing
+                # h = habitats.get(map_code) and have habitats map from map_code to habitat?? 
+                # Second, there is NOWHERE I can find in the code where the members of the habitats dictionary are 
+                # documented.  I had to look at the output to figure it out.  Please fix this. --Luca
                 h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
                         h["resistance"] = 0 if map_code >= 100 and map_code < 200 else h["resistance"]
                     writer.writerow(h.values())
                 else:
-                    if refine_method == "forest" or refine_method == "forest_add308":
-                        writer.writerow([""] * 5 + [map_code] + [0 if map_code >= 100 and map_code < 200 else 1])
-                    else:
-                        writer.writerow([""] * 5 + [map_code] + [1])
+                    d = {'map_code': map_code}, {'resistance': 0 if map_code >= 100 and map_code < 200 else 1}
+                    writer.writerow(d)
 
     def get_good_terrain(self, habitats, refine_method="forest_add308") -> list[int]:
         """
