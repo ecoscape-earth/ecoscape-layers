@@ -15,6 +15,7 @@ from .utils import reproject_shapefile, make_dirs_for_file
 
 import tqdm
 import psutil
+from itertools import chain
 
 
 class LayerGenerator(object):
@@ -22,6 +23,26 @@ class LayerGenerator(object):
     For things like reprojecting, building resistance tables, and creating habitat layers and landcover matrix layers.
     This class maintains a common CRS, resolution, and resampling method for this purpose.
     """
+
+    # IUCN map code ranges
+    # NOTE: These codes can be found on https://www.iucnredlist.org/resources/habitat-classification-scheme
+    FORESTS = (100, 200)
+    SAVANNAS = (200, 300)
+    SHRUBLANDS = (300, 400)
+    GRASSLANDS = (400, 500)
+    WETLANDS = (500, 600)
+    ROCKY = (600, 700)
+    CAVES = (700, 800)
+    DESERTS = (800, 900)
+    MARINE_NERITIC = (900, 1000)
+    MARINE_OCEANIC = (1000, 1100)
+    MARINE_DEEP = (1100, 1200)
+    MARINE_INTERTIDAL = (1200, 1300)
+    MARINE_COSTAL = (1300, 1400)
+    ARTIFICIAL = (1400, 1600)
+    INTRODUCED_VEGETATION = (1600, 1700)
+    OTHER = (1700, 1800)
+    UNKNOWN = (1800, 1900)
 
     def __init__(
         self,
@@ -53,53 +74,17 @@ class LayerGenerator(object):
         :param landcover: The landcover map in GeoTiff format.
         """
 
-        # get the bounds of the landcover map
-        bounds = landcover.dataset.bounds
-
-        # convert bounds to id num
-        bounds_id = hash(bounds)
-
-        # get the file name of the landcover map
-        landcover_fn_basename = os.path.basename(self.landcover_fn)
-        landcover_fn_basename = os.path.splitext(landcover_fn_basename)[0]
-
-        # add the bounds to the landcover file name
-        map_codes_id = f"{landcover_fn_basename}_{bounds_id}"
-
-        # create map codes file name
-        map_codes_fn = f"map_codes_{map_codes_id}.csv"
-
-        # create map codes directory
-        map_codes_dir = os.path.join(os.path.dirname(self.landcover_fn), "map_codes")
-        os.makedirs(map_codes_dir, exist_ok=True)
-
-        # create the full path to the map codes file
-        map_codes_output_path = os.path.join(map_codes_dir, map_codes_fn)
-
-        # check if the map codes file exists
-        if os.path.exists(map_codes_output_path):
-            # read the map codes file
-            with open(map_codes_output_path, "r") as csvfile:
-                reader = csv.reader(csvfile)
-                next(reader)
-                map_codes = [int(row[0]) for row in reader]
-
-            return map_codes
-
         # get all unique map codes from the landcover map
         tile = landcover.get_all_as_tile()
 
         if tile is None:
             raise ValueError("Landcover file is empty.")
 
-        map_codes: list[int] = sorted(list(np.unique(tile.m)))
+        # get map data from tile.m as a numpy matrix
+        map_data: np.ndarray = tile.m
 
-        # write the map codes to a file
-        with open(map_codes_output_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(["map_code"])
-            for map_code in map_codes:
-                writer.writerow([map_code])
+        # get unique map codes
+        map_codes: list[int] = sorted(list(set(chain(map_data.flatten()))))
 
         return map_codes
 
@@ -191,7 +176,8 @@ class LayerGenerator(object):
         """
 
         # get the map codes
-        map_codes = self.get_map_codes(landcover)
+        # using range 2000 as this is all available map codes
+        map_codes = range(2000)
 
         with open(output_path, "w", newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=habitats[0].keys())
@@ -202,7 +188,11 @@ class LayerGenerator(object):
                 h = code_to_habitat.get(map_code)
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
-                        h["resistance"] = 0 if map_code >= 100 and map_code < 200 else h["resistance"]
+                        h["resistance"] = 0 if in_hab(self.FORESTS) else h["resistance"]
+                    elif refine_method == "forest_africa":
+                        # will have the forest and shrublands set to 0 regardless of the habitat data
+                        h["resistance"] = 0 if in_hab(self.FORESTS, self.SHRUBLANDS) else h["resistance"]
+
                     writer.writerow(h.values())
                 else:
                     default_row = {'map_code': map_code}, {'resistance': 0 if map_code >= 100 and map_code < 200 else 1}
@@ -218,14 +208,28 @@ class LayerGenerator(object):
         :return: list of map codes filtered by refine_method.
         """
 
+        # Predefine good terrain map codes
+        suit_hab = [h["map_code"] for h in habitats if h["suitability"] == "Suitable"]
+        maj_hab = [h["map_code"] for h in habitats if h["majorimportance"] == "Yes"]
+
+        # function to combine ranges from range function
+        def comb_ranges(*ranges: tuple[int, int]) -> list[int]:
+            codes = []
+            for r in ranges:
+                codes.extend(list(range(r[0], r[1])))
+            return codes
+
         if refine_method == "forest":
-            return [x for x in range(100, 110)]
+            return comb_ranges(self.FORESTS)
         elif refine_method == "forest_add308":
-            return [x for x in range(100, 110)] + [308]
+            return comb_ranges(self.FORESTS) + [308]
+        elif refine_method == "forest_africa":
+            hab_ranges = comb_ranges(self.FORESTS, self.SHRUBLANDS, self.INTRODUCED_VEGETATION)
+            return list(set(hab_ranges + suit_hab + maj_hab))
         elif refine_method == "allsuitable":
-            return [hab["map_code"] for hab in habitats if hab["suitability"] == "Suitable"]
+            return suit_hab
         elif refine_method == "majoronly":
-            return [hab["map_code"] for hab in habitats if hab["majorimportance"] == "Yes"]
+            return maj_hab
         else:
             return []
 
