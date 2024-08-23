@@ -197,21 +197,18 @@ class LayerGenerator(object):
             writer = csv.DictWriter(csvfile, fieldnames=habitats[0].keys())
             writer.writeheader()
             # map codes from the landcover map
+            code_to_habitat = {hab["map_code"]: hab for hab in habitats}
             for map_code in map_codes:
-                # TODO: This is bad in two ways. 
-                # First, it somehow assumes an order of the stuff in habitats?  But why? 
-                # Can't we just do a .get in the dictionary, doing
-                # h = habitats.get(map_code) and have habitats map from map_code to habitat?? 
-                # Second, there is NOWHERE I can find in the code where the members of the habitats dictionary are 
+                # TODO: There is NOWHERE I can find in the code where the members of the habitats dictionary are 
                 # documented.  I had to look at the output to figure it out.  Please fix this. --Luca
-                h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
+                h = code_to_habitat.get(map_code)
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
                         h["resistance"] = 0 if map_code >= 100 and map_code < 200 else h["resistance"]
                     writer.writerow(h.values())
                 else:
-                    d = {'map_code': map_code}, {'resistance': 0 if map_code >= 100 and map_code < 200 else 1}
-                    writer.writerow(d)
+                    default_row = {'map_code': map_code}, {'resistance': 0 if map_code >= 100 and map_code < 200 else 1}
+                    writer.writerow(default_row)
 
     def get_good_terrain(self, habitats, refine_method="forest_add308") -> list[int]:
         """
