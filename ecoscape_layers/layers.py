@@ -199,8 +199,6 @@ class LayerGenerator(object):
             # map codes from the landcover map
             code_to_habitat = {hab["map_code"]: hab for hab in habitats}
             for map_code in map_codes:
-                # TODO: There is NOWHERE I can find in the code where the members of the habitats dictionary are 
-                # documented.  I had to look at the output to figure it out.  Please fix this. --Luca
                 h = code_to_habitat.get(map_code)
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
