@@ -44,15 +44,15 @@ The `warp` function is used for reprojecting, rescaling, and/or cropping a raste
 
 Once you have the landcover matrix layer prepared, a `LayerGenerator` instance may be initialized given:
 
+- `landcover_fn`: path to landcover matrix raster. Habitat layers produced under the instance will take on the projection, resolution, and bounds of the landcover matrix raster.
+
 - `redlist_key`: IUCN Red List API key.
 
-- `landcover_fn`: path to landcover matrix raster. Habitat layers produced under the instance will take on the projection, resolution, and bounds of the landcover matrix raster.
+- `ebird_key`: eBird API key. This is only required if `range_src` is set to "ebird" in the `generate_habitat` function.
 
 - `elevation_fn`: path to optional elevation raster for filtering habitats by species elevation. If not specified, elevation will not be considered in the creation of habitat layers.
 
-- `iucn_range_src`: path to optional IUCN dataset of ranges for bird species. Refer to Setup for how to obtain this if needed. This is not required if `range_src` is set to "ebird".
-
-- `ebird_key`: eBird API key. This is not required if `range_src` is set to "iucn".
+- `iucn_range_src`: path to optional IUCN dataset of ranges for bird species. Refer to Setup for how to obtain this if needed. This is required if `range_src` is set to "iucn".
 
 You can then use the `generate_habitat` method to produce a habitat layer for a given bird species based on range map data, terrain preferences, and elevation if specified in the constructor. This method takes parameters:
 

@@ -46,19 +46,19 @@ class LayerGenerator(object):
 
     def __init__(
         self,
-        redlist_key: str,
         landcover_fn: str,
+        redlist_key: str,
+        ebird_key: str | None = None,
         elevation_fn: str | None = None,
         iucn_range_src: str | None = None,
-        ebird_key: str | None = None,
     ):
         """
         Initializes a LayerGenerator object.
-        :param redlist_key: IUCN Red List API key.
         :param landcover_fn: file path to the initial landcover raster.
+        :param redlist_key: IUCN Red List API key.
+        :param ebird_key: eBird API key.
         :param elevation_fn: file path to optional input elevation raster for filtering habitat by elevation; use None for no elevation consideration.
         :param iucn_range_src: file path to the IUCN range source if wanted.
-        :param ebird_key: eBird API key.
         """
         self.redlist = RedList(redlist_key, ebird_key)
         self.ebird_key = ebird_key
