@@ -180,17 +180,12 @@ class LayerGenerator(object):
         map_codes = range(2000)
 
         with open(output_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(habitats[0].keys())
-
+            writer = csv.DictWriter(csvfile, fieldnames=habitats[0].keys())
+            writer.writeheader()
             # map codes from the landcover map
+            code_to_habitat = {hab["map_code"]: hab for hab in habitats}
             for map_code in map_codes:
-                h = next((hab for hab in habitats if hab["map_code"] == map_code), None)
-
-                # check if in at least one of multiple habitat ranges
-                def in_hab(*ranges: tuple[int, int]) -> bool:
-                    return any((r[0] <= map_code < r[1]) for r in ranges)
-
+                h = code_to_habitat.get(map_code)
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
                         h["resistance"] = 0 if in_hab(self.FORESTS) else h["resistance"]
@@ -200,38 +195,8 @@ class LayerGenerator(object):
 
                     writer.writerow(h.values())
                 else:
-                    if refine_method == "forest" or refine_method == "forest_add308":
-                        writer.writerow([""] * 5 + [map_code] + [0 if in_hab(self.FORESTS) else 1])
-                    elif refine_method == "forest_africa":
-                        resistance = 1
-                        if in_hab(self.FORESTS, self.SHRUBLANDS):
-                            resistance = 0
-                        elif in_hab(self.INTRODUCED_VEGETATION):
-                            resistance = 0.1
-                        elif in_hab(
-                            self.SAVANNAS,
-                            self.GRASSLANDS,
-                            self.WETLANDS,
-                            self.ROCKY,
-                            self.CAVES,
-                            self.OTHER,
-                            self.UNKNOWN,
-                        ):
-                            resistance = 0.9
-                        elif in_hab(
-                            self.DESERTS,
-                            self.MARINE_NERITIC,
-                            self.MARINE_OCEANIC,
-                            self.MARINE_DEEP,
-                            self.MARINE_INTERTIDAL,
-                            self.MARINE_COSTAL,
-                            self.ARTIFICIAL,
-                        ):
-                            resistance = 1
-
-                        writer.writerow([""] * 5 + [map_code] + [resistance])
-                    else:
-                        writer.writerow([""] * 5 + [map_code] + [1])
+                    default_row = {'map_code': map_code}, {'resistance': 0 if map_code >= 100 and map_code < 200 else 1}
+                    writer.writerow(default_row)
 
     def get_good_terrain(self, habitats, refine_method="forest_add308") -> list[int]:
         """
