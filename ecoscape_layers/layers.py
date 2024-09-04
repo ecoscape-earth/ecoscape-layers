@@ -156,6 +156,15 @@ class LayerGenerator(object):
                 + "Your eBird API key may be expired or invalid."
             )
 
+    def in_hab(self, habitat: str) -> bool:
+        """
+        Checks if the given habitat is in the predefined habitat list.
+
+        :param habitat: The habitat to check.
+        :return: True if the habitat is in the list, False otherwise.
+        """
+        return habitat in self.habitat_list
+    
     def generate_resistance_table(
         self,
         habitats: list[dict[str, str | int | float]],
@@ -183,15 +192,16 @@ class LayerGenerator(object):
             writer = csv.DictWriter(csvfile, fieldnames=habitats[0].keys())
             writer.writeheader()
             # map codes from the landcover map
+            hab = {}
             code_to_habitat = {hab["map_code"]: hab for hab in habitats}
             for map_code in map_codes:
                 h = code_to_habitat.get(map_code)
                 if h is not None:
                     if refine_method == "forest" or refine_method == "forest_add308":
-                        h["resistance"] = 0 if in_hab(self.FORESTS) else h["resistance"]
+                        h["resistance"] = 0 if self.FORESTS in hab else h["resistance"]
                     elif refine_method == "forest_africa":
                         # will have the forest and shrublands set to 0 regardless of the habitat data
-                        h["resistance"] = 0 if in_hab(self.FORESTS, self.SHRUBLANDS) else h["resistance"]
+                        h["resistance"] = 0 if self.FORESTS in hab or self.SHRUBLANDS in hab else h["resistance"]
 
                     writer.writerow(h.values())
                 else:
