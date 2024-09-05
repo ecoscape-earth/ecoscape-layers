@@ -205,7 +205,10 @@ class LayerGenerator(object):
 
                     writer.writerow(h.values())
                 else:
-                    default_row = {'map_code': map_code}, {'resistance': 0 if map_code >= 100 and map_code < 200 else 1}
+                    default_row = {
+                        'map_code': map_code,
+                        'resistance': 0 if 100 <= map_code < 200 else 1
+                    }                    
                     writer.writerow(default_row)
 
     def get_good_terrain(self, habitats, refine_method="forest_add308") -> list[int]:
