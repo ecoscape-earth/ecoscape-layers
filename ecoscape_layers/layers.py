@@ -205,10 +205,9 @@ class LayerGenerator(object):
                     elif refine_method == "forest_africa":
                         resistance = 1
                         if in_hab(self.FORESTS, self.SHRUBLANDS):
-                            resistance = 0
-                        elif in_hab(self.INTRODUCED_VEGETATION):
                             resistance = 0.1
                         elif in_hab(
+                            self.INTRODUCED_VEGETATION,
                             self.SAVANNAS,
                             self.GRASSLANDS,
                             self.WETLANDS,
@@ -216,15 +215,15 @@ class LayerGenerator(object):
                             self.CAVES,
                             self.OTHER,
                             self.UNKNOWN,
-                        ):
-                            resistance = 0.9
-                        elif in_hab(
                             self.DESERTS,
                             self.MARINE_NERITIC,
                             self.MARINE_OCEANIC,
                             self.MARINE_DEEP,
                             self.MARINE_INTERTIDAL,
                             self.MARINE_COSTAL,
+                        ):
+                            resistance = 0.9
+                        elif in_hab(
                             self.ARTIFICIAL,
                         ):
                             resistance = 1
@@ -259,8 +258,7 @@ class LayerGenerator(object):
         elif refine_method == "forest_add308":
             return comb_ranges(self.FORESTS) + [308]
         elif refine_method == "forest_africa":
-            hab_ranges = comb_ranges(self.FORESTS, self.SHRUBLANDS, self.INTRODUCED_VEGETATION)
-            return list(set(hab_ranges + suit_hab + maj_hab))
+            return maj_hab
         elif refine_method == "allsuitable":
             return suit_hab
         elif refine_method == "majoronly":
