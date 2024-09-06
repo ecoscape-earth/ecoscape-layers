@@ -203,7 +203,7 @@ class LayerGenerator(object):
                         # will have the forest and shrublands set to 0 regardless of the habitat data
                         h["resistance"] = 0 if self.FORESTS in hab or self.SHRUBLANDS in hab else h["resistance"]
 
-                    writer.writerow(h.values())
+                    writer.writerow(h)
                 else:
                     default_row = {
                         'map_code': map_code,
