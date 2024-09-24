@@ -16,9 +16,9 @@ To use the package, you will need:
 
 ## Usage
 
-This package is used as a module. Use the `warp` function in `layers.py` as needed to produce the landcover matrix layer and/or elevation raster with the desired parameters/bounds. The class `LayerGenerator` in `layers.py` can then be used to create corresponding habitat layers for various bird species.
+This package is used as a module. Use the `warp` function in `utils.py` as needed to produce the landcover matrix layer and/or elevation raster with the desired parameters/bounds. The class `LayerGenerator` in `layers.py` can then be used to create corresponding habitat layers for various bird species.
 
-Refer to [tests/test_layers.ipynb](./tests/test_layers.ipynb) for a simple example of how to use the package to produce landcover matrix layers and habitat layers.
+Refer to [tests/test_layers.ipynb](./tests/test_layers.ipynb) for a simple example of how to use the package to produce landcover matrix layers and habitat layers. This examples shows many of the various custom overrides that the package has for fine-tuned control of outputs.
 
 ### Preparing the landcover matrix layer
 
@@ -40,40 +40,38 @@ The `warp` function is used for reprojecting, rescaling, and/or cropping a raste
 
 - `resampling`: resampling method to use if reprojection of the input landcover layer is required; see https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for valid options. Optional.
 
+### Creating Resistance CSV
+
+In `utils.py` there is a function called `generate_resistance_table` the functions will generate resistance values corresponding to terrain type classified by the [IUCN Redlist Habitat Classification Scheme](https://www.iucnredlist.org/resources/habitat-classification-scheme). Resistance values should be based on a specific terrain/habitat type. To control how these resistance values are created use these function parameters:
+
+- `habitats` (dict[int, dict[str, str | bool]]): IUCN Red List habitat data for the species for which the table should be generated.
+- `output_path` (str): The output path for the resistance csv.
+- `map_codes` (list\[int\], optional): The map_codes that will be processed in the refinement method. The map codes defined in the habitat data are automatically added to this parameter. Default is all map codes from IUCN plus some extra extraneous map codes.
+- `refinement_method` (function(int, dict[int, dict[str, str | bool]]) -> float, optional): Function that defines resistance when resistance is not defined in habitats. Defaults general pre-defined refinement method.
+  - The default_refinement_method is a general use refinement method. If you want to use your own refinement method the default_refinement_method is a great starting point.
+
+This function will create a resistance CSV in the desired location and it will also return the data in the form of a pandas Dataframe.
+
 ### Creating habitat layers
 
 Once you have the landcover matrix layer prepared, a `LayerGenerator` instance may be initialized given:
 
-- `landcover_fn`: path to landcover matrix raster. Habitat layers produced under the instance will take on the projection, resolution, and bounds of the landcover matrix raster.
-
-- `redlist_key`: IUCN Red List API key.
-
-- `ebird_key`: eBird API key. This is only required if `range_src` is set to "ebird" in the `generate_habitat` function.
-
-- `elevation_fn`: path to optional elevation raster for filtering habitats by species elevation. If not specified, elevation will not be considered in the creation of habitat layers.
-
-- `iucn_range_src`: path to optional IUCN dataset of ranges for bird species. Refer to Setup for how to obtain this if needed. This is required if `range_src` is set to "iucn".
+- `landcover_fn` (str): file path to the initial landcover raster.
+- `redlist_key` (str): IUCN Red List API key.
+- `ebird_key` (str | None, optional): eBird API key. Defaults to None.
+- `elevation_fn` (str | None, optional): file path to optional input elevation raster for filtering habitat by elevation. Use None for no elevation consideration. Defaults to None.
+- `iucn_range_src` (str | None, optional): file path to the IUCN range source if wanted. Defaults to None.
 
 You can then use the `generate_habitat` method to produce a habitat layer for a given bird species based on range map data, terrain preferences, and elevation if specified in the constructor. This method takes parameters:
 
-- `species_code`: If `range_src` is set to "iucn", then use the scientific name for the bird species. If `range_src` is set to "ebird", then use instead the 6-letter eBird code of the species for which habitat layers should be generated. This can be found by looking up the species on eBird and taking the 6-letter code found at the end of the species page's URL.
-
-- `habitat_fn`: name of output habitat layer.
-
-- `resistance_dict_fn`: name of output resistance dictionary CSV.
-
-- `range_fn`: name of output range map for the species, which is downloaded from eBird or extracted from `iucn_range_src` as an intermediate step for producing the habitat layer. Based on the source, the type of file returned differs; this should end in `.gpkg` if `range_src` is "ebird" and `.shp` if `range_src` is "iucn".
-
-- `range_src`: source from which to obtain range maps; one of "ebird" or "iucn". If "iucn" is specified, then `iucn_range_src` from the constructor must be specified also. If "ebird" is specified then the `ebird_key` from the constructor must be specified.
-
-- `refine_method`: method by which habitat pixels should be selected when creating a habitat layer.
-
-  - `forest`: selects all forest pixels.
-  - `forest_add308`: selects all forest pixels and pixels with code "308" (Shrubland – Mediterranean-type shrubby vegetation).
-  - `allsuitable`: selects all pixels with landcover deemed suitable for the species, as determined by the IUCN Red List.
-  - `majoronly`: selects all pixels with landcover deemed of major importance to the species, as determined by the IUCN Red List.
-
-- `refine_list`: list of map codes for which the corresponding pixels should be considered habitat. This is provided as an alternative to refine_method, which offers limited options. This overrides refine_method if both refine_method and refine_list are specified.
+- `species_code` (str): IUCN scientific name or eBird code. It is determined based on what that range_src is set to.
+- `iucn_habitat_data` (dict[int, dict[str, int | float | str | bool]] | None, optional): The habitat data for a species received from IUCN Redlist. Defaults to None.
+  - The `iucn_habitat_data` is optional parameter but will most likely be used to prevent the fetching of IUCN habitat data multiple times.
+- `habitat_fn` (str | None, optional): The output path for the habitat layer. Defaults to None.
+- `range_fn` (str | None, optional): The output path for the range map. This is created before making the habitat layer. Defaults to None.
+- `range_src` (str, optional): The source from which to obtain range maps from. Defaults to "iucn".
+- `current_hab_overrides` (list[str | int] | None, optional): This parameter is passed to the get_current_habitat function and allows the user to redefine what is considered habitat. Defaults to None.
+  - The `current_hab_overrides` should most likely not be used to preserve consistency across what is determined as habitat. However it allows for custom control for users.
 
 ## Known issues
 
