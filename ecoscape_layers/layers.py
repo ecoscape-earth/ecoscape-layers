@@ -65,6 +65,7 @@ class LayerGenerator(object):
         self.landcover_fn = os.path.abspath(landcover_fn)
         self.elevation_fn = None if elevation_fn is None else os.path.abspath(elevation_fn)
         self.iucn_range_src = iucn_range_src
+        
 
     def get_map_codes(self, landcover: GeoTiff) -> list[int]:
         """
