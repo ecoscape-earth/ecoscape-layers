@@ -8,17 +8,17 @@ To use the package, you will need:
 
 - An API key for the IUCN Red List API, which is obtainable from http://apiv3.iucnredlist.org/.
 
-- An API key for the eBird Status and Trends API, which is obtainable from https://science.ebird.org/en/status-and-trends/download-data. We use the data for 2022 in this version of the package. The EcoScape paper uses data from 2020, which has been archived by eBird; see the paper for more details. Note that while eBird is the default source for range maps in layer generation, it mainly provides range map data for birds in the US. If range maps are not found for the species you are studying, consider using range maps from the IUCN Red List (described below).
-
-- If you would like to use range maps from the IUCN Red List, you will need to obtain a copy of the dataset in geodatabase format from http://datazone.birdlife.org/species/requestdis. This can then be passed in as an input to the package. Range maps from the IUCN Red List are generally available for birds around the world, which gives more freedom to experiment with birds that are not in the US compared to using eBird range maps.
-
 - The initial landcover raster that we use to produce our layers originates from a global map produced by [Jung et al.](https://doi.org/10.1038/s41597-020-00599-8) and is available for download at https://zenodo.org/record/4058819 (iucn_habitatclassification_composite_lvl2_ver004.zip). It follows the [IUCN Red List Habitat Classification Scheme](https://www.iucnredlist.org/resources/habitat-classification-scheme).
+
+- An API key for the eBird Status and Trends API, which is obtainable from https://science.ebird.org/en/status-and-trends/download-data, if you wish to use eBird range maps. We use the data for 2022 in this version of the package. The EcoScape paper uses data from 2020, which has been archived by eBird; see the paper for more details. Note that while eBird is the default source for range maps in layer generation, it mainly provides range map data for birds in the US. If range maps are not found for the species you are studying, consider using range maps from the IUCN Red List (described below).
+
+- If you would like to use range maps from the IUCN Red List instead of eBird, you will need to obtain a copy of the dataset in geodatabase format from http://datazone.birdlife.org/species/requestdis. This can then be passed in as an input to the package. Range maps from the IUCN Red List are generally available for birds around the world, which gives more freedom to experiment with birds that are not in the US compared to using eBird range maps.
 
 ## Usage
 
 This package is used as a module. Use the `warp` function in `utils.py` as needed to produce the landcover matrix layer and/or elevation raster with the desired parameters/bounds. The class `LayerGenerator` in `layers.py` can then be used to create corresponding habitat layers for various bird species.
 
-Refer to [tests/test_layers.ipynb](./tests/test_layers.ipynb) for a simple example of how to use the package to produce landcover matrix layers and habitat layers. This examples shows many of the various custom overrides that the package has for fine-tuned control of outputs.
+Refer to [tests/test_layers.ipynb](./tests/test_layers.ipynb) for a simple example of how to use the package to produce landcover matrix layers and habitat layers. This example shows many of the various custom overrides that the package has for fine-tuned control of outputs.
 
 ### Preparing the landcover matrix layer
 
@@ -42,13 +42,13 @@ The `warp` function is used for reprojecting, rescaling, and/or cropping a raste
 
 ### Creating Resistance CSV
 
-In `utils.py` there is a function called `generate_resistance_table` the functions will generate resistance values corresponding to terrain type classified by the [IUCN Redlist Habitat Classification Scheme](https://www.iucnredlist.org/resources/habitat-classification-scheme). Resistance values should be based on a specific terrain/habitat type. To control how these resistance values are created use these function parameters:
+In `utils.py`, the function `generate_resistance_table` generates resistance values corresponding to terrain type classified by the [IUCN Redlist Habitat Classification Scheme](https://www.iucnredlist.org/resources/habitat-classification-scheme). Resistance values should be based on a specific terrain/habitat type. To control how these resistance values are created, use these function parameters:
 
 - `habitats` (dict[int, dict[str, str | bool]]): IUCN Red List habitat data for the species for which the table should be generated.
 - `output_path` (str): The output path for the resistance csv.
-- `map_codes` (list\[int\], optional): The map_codes that will be processed in the refinement method. The map codes defined in the habitat data are automatically added to this parameter. Default is all map codes from IUCN plus some extra extraneous map codes.
-- `refinement_method` (function(int, dict[int, dict[str, str | bool]]) -> float, optional): Function that defines resistance when resistance is not defined in habitats. Defaults general pre-defined refinement method.
-  - The default_refinement_method is a general use refinement method. If you want to use your own refinement method the default_refinement_method is a great starting point.
+- `map_codes` (list\[int\], optional): The map_codes that will be processed in the refinement method. The map codes defined in the habitat data are automatically added to this parameter. Default is all map codes from IUCN plus some extraneous map codes.
+- `refinement_method` (function(int, dict[int, dict[str, str | bool]]) -> float, optional): Function that defines resistance when resistance is not defined in habitats. Defaults to general pre-defined refinement method.
+  - The default_refinement_method is a general use refinement method. If you want to use your own refinement method, the default_refinement_method is a great starting point.
 
 This function will create a resistance CSV in the desired location and it will also return the data in the form of a pandas Dataframe.
 
@@ -62,7 +62,7 @@ Once you have the landcover matrix layer prepared, a `LayerGenerator` instance m
 - `elevation_fn` (str | None, optional): file path to optional input elevation raster for filtering habitat by elevation. Use None for no elevation consideration. Defaults to None.
 - `iucn_range_src` (str | None, optional): file path to the IUCN range source if wanted. Defaults to None.
 
-You can then use the `generate_habitat` method to produce a habitat layer for a given bird species based on range map data, terrain preferences, and elevation if specified in the constructor. This method takes parameters:
+You can then use the `generate_habitat` method to produce a habitat layer for a given bird species based on range map data, terrain preferences, and elevation if specified in the constructor. This method takes the following parameters:
 
 - `species_code` (str): IUCN scientific name or eBird code. It is determined based on what that range_src is set to.
 - `iucn_habitat_data` (dict[int, dict[str, int | float | str | bool]] | None, optional): The habitat data for a species received from IUCN Redlist. Defaults to None.
@@ -71,7 +71,7 @@ You can then use the `generate_habitat` method to produce a habitat layer for a 
 - `range_fn` (str | None, optional): The output path for the range map. This is created before making the habitat layer. Defaults to None.
 - `range_src` (str, optional): The source from which to obtain range maps from. Defaults to "iucn".
 - `current_hab_overrides` (list[str | int] | None, optional): This parameter is passed to the get_current_habitat function and allows the user to redefine what is considered habitat. Defaults to None.
-  - The `current_hab_overrides` should most likely not be used to preserve consistency across what is determined as habitat. However it allows for custom control for users.
+  - `current_hab_overrides` should most likely not be used to preserve consistency across what is determined as habitat. However, it gives users more custom control.
 
 ## Known issues
 

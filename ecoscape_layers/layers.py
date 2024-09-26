@@ -14,9 +14,8 @@ from .utils import reproject_shapefile, make_dirs_for_file, get_current_habitat
 
 
 class LayerGenerator:
-    """Generate a Habitat Layers with various parameters to control the final output.
-    The Habitat Layer determine what is considered habitat for a species.
-    It can be thought of as raster that shows where habitat is and is not for a species.
+    """Generate a Habitat Layer with various parameters to control the final output.
+    The Habitat Layer is a raster that indicates what is considered habitat for a species.
     """
 
     def __init__(
@@ -48,7 +47,7 @@ class LayerGenerator:
 
         Args:
             species_name (str): scientific name of species to obtain range for.
-            output_path (str): path for output .shp file (if exists already, the old file(s) will be deleted)
+            output_path (str): path for output .shp file (if it exists already, the old file(s) will be overwritten)
         """
 
         # We choose to use this option to avoid spending too much time organizing polygons.
@@ -108,6 +107,7 @@ class LayerGenerator:
 
         req_url = f"https://st-download.ebird.org/v1/fetch?objKey=2022/{species_code}/ranges/{species_code}_range_smooth_9km_2022.gpkg&key={self.ebird_key}"
         res = requests.get(req_url)
+
         if res.status_code == 200:
             with open(output_path, "wb") as res_file:
                 res_file.write(res.content)
@@ -128,12 +128,12 @@ class LayerGenerator:
     ):
         """Runner function for full process of habitat layer generation for one species.
 
-        - The iucn_habitat_data is optional parameter but will most likely be used to prevent the fetching of IUCN habitat data multiple times.
-        - The current_hab_overrides should most likely not be used to preserve consistency across what is determined as habitat.
-        However it allows for custom control for users.
+        - iucn_habitat_data is an optional parameter, but should ideally be used to prevent unnecessarily fetching IUCN habitat data multiple times.
+        - current_hab_overrides should most likely not be used to preserve consistency across what is determined as habitat.
+        However, it gives users more custom control.
 
         Args:
-            species_code (str): IUCN scientific name or eBird code. It is determined based on what that range_src is set to.
+            species_code (str): IUCN scientific name or eBird code. Determined based on value of range_src.
             iucn_habitat_data (dict[int, dict[str, int  |  float  |  str  |  bool]] | None, optional): The habitat data for a species received from IUCN Redlist. Defaults to None.
             habitat_fn (str | None, optional): The output path for the habitat layer. Defaults to None.
             range_fn (str | None, optional): The output path for the range map. This is created before making the habitat layer. Defaults to None.
@@ -141,8 +141,8 @@ class LayerGenerator:
             current_hab_overrides (list[str  |  int] | None, optional): This parameter is passed to the get_current_habitat function and allows the user to redefine what is considered habitat. Defaults to None.
 
         Raises:
-            ValueError: If the user said they wanted eBird range maps but did not provided a ebird_key.
-            ValueError: If the user said they wanted IUCN range maps but did not provided an IUCN range map data src.
+            ValueError: If the user said they wanted eBird range maps but did not provide a ebird_key.
+            ValueError: If the user said they wanted IUCN range maps but did not provide an IUCN range map data src.
             AssertionError: If the IUCN Redlist does not contain any habitat data for species.
             FileNotFoundError: If the range map file that is created/fetched cannot be found later in the habitat layer creation pipeline.
         """
@@ -165,16 +165,17 @@ class LayerGenerator:
         make_dirs_for_file(habitat_fn)
         make_dirs_for_file(range_fn)
 
-        # Obtain species habitat information from the IUCN Red List.
+        # Obtain scientific name of species if needed.
         if range_src == "iucn":
             sci_name = species_code
         else:
             sci_name = self.redlist.get_scientific_name(species_code)
 
+        # Obtain species habitat information from the IUCN Red List.
         if iucn_habitat_data is None:
             iucn_habitat_data = self.redlist.get_habitat_data(sci_name)
 
-        # Check for errors before processing habitat layer
+        # Check for errors before processing habitat layer.
         if len(iucn_habitat_data) == 0:
             error = f"""\
                 Habitat preferences for {species_code} could not be found on the IUCN Red List.

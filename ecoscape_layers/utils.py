@@ -29,7 +29,7 @@ def reproject_shapefile(
     :return: list of reprojected features.
     """
 
-    myfeatures = []
+    features = []
 
     with fiona.open(shapes_path, "r", layer=shapes_layer) as shp:
         # create a Transformer for changing from the current CRS to the destination CRS
@@ -50,16 +50,16 @@ def reproject_shapefile(
                         feature["geometry"]["coordinates"][i][j] = [
                             transformer.transform(*ring)
                         ]
-            myfeatures.append(feature)
+            features.append(feature)
 
         # if file_path is specified, write the result to a new shapefile
         if file_path is not None:
             meta = shp.meta
             meta.update({"driver": "ESRI Shapefile", "crs_wkt": dest_crs})
             with fiona.open(file_path, "w", **meta) as output:
-                output.writerecords(myfeatures)
+                output.writerecords(features)
 
-    return myfeatures
+    return features
 
 
 def make_dirs_for_file(file_name: str):
@@ -112,7 +112,7 @@ def iucn_habs_to_codes(
     habitat_codes: list[str | int],
 ) -> list[str | int]:
     """Takes a list of strings and integers and replaces strings that are found in the IUCN habitat classification scheme with their respective map codes.
-    This function does not guarantee to remove all strings from the list as their could be string that is not found the IUCN habitat classification scheme.
+    This function does not guarantee removing all strings from the list, as there could be strings that are not found in the IUCN habitat classification scheme.
 
     Args:
         habitats (list[str  |  int]): A list of map codes which can contain strings matching the IUCN habitat classification scheme. Other strings can also be included but will not be replaced.
@@ -161,21 +161,21 @@ def confirm_list_int(arr: list[Any]) -> list[int] | None:
 
 
 def in_habs(map_code: int, criteria: list[str | int]) -> bool:
-    """Check if a map code is in specified criteria. This criteria is made up of keywords the represent map code ranges and specific map codes.
+    """Check if a map code is in a list of specified criteria. This criteria is made up of keywords that represent map code ranges and specific map codes.
 
     Examples:
-        criteria_forest308: ["forest" 308]
-        criteria_custom: ["forest" "shrubland" *list(range(600, 750))]
+        criteria_forest308: ["forest", 308]
+        criteria_custom: ["forest", "shrubland", *list(range(600, 750))]
 
     Args:
-        map_code (int): _description_
-        habitat_codes (list[str  |  int]): _description_
+        map_code (int): An integer map code.
+        habitat_codes (list[str  |  int]): A list of strings and/or integers representing the criteria to check map_code against.
 
     Raises:
         KeyError: If the keyword used does not exist in the IUCN Habitat Classification Scheme.
 
     Returns:
-        bool: True if a map code meets the criteria and false otherwise.
+        bool: True if a map code meets the criteria and False otherwise.
     """
 
     for criterion in criteria:
@@ -247,12 +247,12 @@ def generate_resistance_table(
     """Generates the resistance dictionary for a given species as a CSV file using habitat preference data from the IUCN Red List.
 
     - Link to map code definitions: https://www.iucnredlist.org/resources/habitat-classification-scheme
-    - The default_refinement_method is a general use refinement method. If you want to use your own refinement method the default_refinement_method is a great starting point.
+    - The default_refinement_method is a general use refinement method. If you want to use your own refinement method, the default_refinement_method is a great starting point.
 
     Args:
         habitats (dict[int, dict[str, str | bool]]): IUCN Red List habitat data for the species for which the table should be generated.
         output_path (str): The output path for the resistance csv.
-        map_codes (list[int], optional): The map_codes that will be processed in the refinement method. The map codes defined in the habitat data are automatically added to this parameter. Default is all map codes from IUCN plus some extra extraneous map codes.
+        map_codes (list[int], optional): The map_codes that will be processed in the refinement method. The map codes defined in the habitat data are automatically added to this parameter. Default is all map codes from IUCN plus some extraneous map codes.
         refinement_method (function(int, dict[int, dict[str, str | bool]]) -> float, optional): Function that defines resistance when resistance is not defined in habitats. Defaults general pre-defined refinement method.
 
     Returns:
@@ -320,25 +320,25 @@ def get_current_habitat(
     overrides: list[str | int] | None = None,
 ) -> list[int]:
     """Determine the map codes that are considered habitat for a species.
-    These map codes will then be used to create habitat layer with habitat at these map codes.
+    These map codes will then be used to create the habitat layer with habitat at these map codes.
 
-    - Using the overrides parameter allows you determine your custom definition of what should be considered habitat.
-    Inputs for for the overrides can consist of integers that will represent specific map codes and strings that
-    represent keywords. These keywords will then be converted into map codes. These keywords can take the form of the
-    IUCN Habitat Classification Scheme categories which are listed in the constants.py file. Additionally, you can
-    specify "majorimportance" or "suitable" to only use habitats for a species that have these qualities.
+    - Using the overrides parameter allows you to determine your custom definition of what should be considered habitat.
+    Inputs for the overrides may consist of integers that represent specific map codes and strings that
+    represent keywords, which will then be converted into map codes. These keywords can take the form of the
+    IUCN Habitat Classification Scheme categories listed in the constants.py file. Additionally, you can
+    specify "majorimportance" or "suitable" to only use habitats with these qualities for a species.
 
     Examples:
-        overrides_forest308: ["forest" 308]
-        overrides_custom: ["forest" "shrubland" *list(range(600, 750))]
+        overrides_forest308: ["forest", 308]
+        overrides_custom: ["forest", "shrubland", *list(range(600, 750))]
 
-    Args:"resistance"
+    Args:
         habitats (dict[int, dict[str, int  |  float  |  str  |  bool]]): The habitat data received from the IUCN Redlist.
-        overrides (list[str  |  int] | None, optional): . Defaults to None.
+        overrides (list[str  |  int] | None, optional): List of strings/integers representing a custom definition of what constitutes habitat. Defaults to None.
 
     Raises:
         KeyError: This occurs when keyword is used in overrides that does not exist.
-        AssertionError: This error should not occur but if it does there is an issue with the code implementation.
+        AssertionError: This error should not occur, but if it does, there is an issue with the code implementation.
 
     Returns:
         list[int]: List of map codes that are considered habitat for a species.
@@ -425,7 +425,7 @@ def warp(
 ):
     """Transform a raster into another raster with various parameters.
 
-    - Note you cannot add padding to something that is not cropped with bounds to have room to add the padding.
+    - Note that you cannot add padding to something that is not cropped with bounds, as otherwise there is no space for padding.
 
     Args:
         input (str): input file path for a raster

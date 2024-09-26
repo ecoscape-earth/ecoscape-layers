@@ -73,12 +73,12 @@ class RedList:
     ) -> dict[int, dict[str, str | bool]]:
         """Gets habitat assessments for suitability for a given species.
         This also adds the associated landcover/terrain map's code to the API response,
-        which are useful for creating resistance mappings and/or habitat layers.
+        which is useful for creating resistance mappings and/or habitat layers.
 
         Args:
             species_name (str): scientific name of the species.
             region (_type_, optional): a specific region to assess habitats in (see https://apiv3.iucnredlist.org/api/v3/docs#regions).. Defaults to None.
-            ebird_code (bool, optional): Reads species_name as an eBird species_code and converts it to a scientific/iucn name. Defaults to False.
+            ebird_code (bool, optional): If True, reads species_name as an eBird species_code and converts it to a scientific/iucn name. Defaults to False.
 
         Raises:
             ValueError: Errors when the code received from the IUCN Redlist is missing a period or data after a period.
@@ -115,15 +115,15 @@ class RedList:
             # take a sub-array of the first two elements
             code_sep = code_sep[:2]
 
-            # zfill each number in two have length two so format is [xx, xx]
+            # fill each number in two have length two so format is [xx, xx]
             code_sep = map(lambda num_str: num_str.zfill(2), code_sep)
 
             # create a map_code that is represented by an int
             hab["map_code"] = int("".join(code_sep))
 
             # Convert bool like strings to bools
-            hab["majorimportance"] = True if hab["majorimportance"] == "Yes" else False
-            hab["suitability"] = True if hab["suitability"] == "Suitable" else False
+            hab["majorimportance"] = (hab["majorimportance"] == "Yes")
+            hab["suitability"] = (hab["suitability"] == "Suitable")
 
         # transform to dict with keys as map_codes and values as hab data
         res = {}
