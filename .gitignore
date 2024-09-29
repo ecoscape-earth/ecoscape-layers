@@ -10,3 +10,6 @@ tests/config.py
 
 !tests/inputs/test_species_list.txt
 !tests/inputs/test_terrain.tif
+
+.venv
+venv

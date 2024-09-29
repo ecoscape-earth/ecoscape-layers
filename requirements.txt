@@ -9,3 +9,4 @@ scgt>=0.0.6
 Shapely>=1.8.4
 tqdm>=4.66.4
 psutil>=5.9.8
+pandas>=2.2.2
