@@ -2,6 +2,17 @@
 
 This package implements the computation of the landscape matrix layer, habitat layers, and landcover-to-resistance mappings that are needed as inputs to the EcoScape algorithm.
 
+**Authors:**
+
+* Jasmine Tai (cjtai@ucsc.edu)
+* Ian Holloway (imhollow@ucsc.edu)
+* Aadity Sharma (ashar115@ucsc.edu)
+* Luca de Alfaro (luca@ucsc.edu)
+* Coen Adler (ctadler@ucsc.edu)
+* Artie Nazarov (anazarov@ucsc.edu)
+* Natalia Ocampo-Peñuela (nocampop@ucsc.edu)
+* Natalie Valett (nvalett@ucsc.edu)
+
 ## Setup
 
 To use the package, you will need:

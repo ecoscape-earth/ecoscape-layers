@@ -4,14 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ecoscape-layers"
-version = "0.0.9"
+version = "0.0.11"
 authors = [
   {name="Jasmine Tai", email="cjtai@ucsc.edu"},
+  {name="Ian Holloway", email="imhollow@ucsc.edu"},
+  {name="Aadity Sharma", email="ashar115@ucsc.edu"},
   {name="Coen Adler", email="ctadler@ucsc.edu"},
   {name="Luca de Alfaro", email="luca@ucsc.edu"},
   {name="Artie Nazarov", email="anazarov@ucsc.edu"},
   {name="Natalia Ocampo-Peñuela", email="nocampop@ucsc.edu"},
-  {name="Natalie Valett", email="nvalett@ucsc.edu"}
+  {name="Natalie Valett", email="nvalett@ucsc.edu"},
 ]
 description = "EcoScape habitat and matrix layer creation"
 readme = "README.md"
