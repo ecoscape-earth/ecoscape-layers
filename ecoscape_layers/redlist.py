@@ -1,5 +1,6 @@
 import requests
 from ebird.api import get_taxonomy
+from textwrap import dedent
 
 
 class RedList:
@@ -74,6 +75,7 @@ class RedList:
         """Gets habitat assessments for suitability for a given species.
         This also adds the associated landcover/terrain map's code to the API response,
         which is useful for creating resistance mappings and/or habitat layers.
+        Currently season data is ignored from IUCN habitat data.
 
         Args:
             species_name (str): scientific name of the species.
@@ -99,6 +101,7 @@ class RedList:
             url += f"/region/{region}"
 
         habs = self.get_from_redlist(url)
+        res = {}
 
         for hab in habs:
             code = str(hab["code"])
@@ -112,29 +115,57 @@ class RedList:
                 error = f"The code '{code}' is missing the required number of '.'"
                 raise ValueError(error)
 
+            # store bool to determine if code will be truncated
+            truncated = len(code_sep) > 2
+
             # take a sub-array of the first two elements
             code_sep = code_sep[:2]
 
             # fill each number in two have length two so format is [xx, xx]
             code_sep = map(lambda num_str: num_str.zfill(2), code_sep)
 
-            # create a map_code that is represented by an int
-            hab["map_code"] = int("".join(code_sep))
-
             # Convert bool like strings to bools
-            hab["majorimportance"] = (hab["majorimportance"] == "Yes")
-            hab["suitability"] = (hab["suitability"] == "Suitable")
+            hab["majorimportance"] = hab["majorimportance"] == "Yes"
+            hab["suitability"] = hab["suitability"] == "Suitable"
 
-        # transform to dict with keys as map_codes and values as hab data
-        res = {}
-        for hab in habs:
-            # save the map_code and delete it from the dict
-            map_code: int = hab["map_code"]
-            del hab["map_code"]
+            # create a map_code that is represented by an int
+            map_code = int("".join(code_sep))
 
+            # add habitat to final result
             if map_code in res:
-                # this should not happen as long as the RedList API is consistent
-                raise KeyError(f"map_code {map_code} was found multiple times")
+                # the map_code can be found multiple times if it is duplicate
+                dup = True
+                for k, v in res[map_code].items():
+                    # dont check the season key has it is not handled currently
+                    if k == "season":
+                        continue
+
+                    # check all other keys
+                    if k not in hab or hab[k] != v:
+                        dup = False
+                        break
+                if dup:
+                    continue
+
+                # The map_code can be found multiple times if the codes are truncated
+                if truncated:
+                    error = f"""\
+                        Warning: A truncated map_code '{map_code}' was found multiple times:
+                            first: {res[map_code]}
+                            new  : {hab}
+                        Using first data as interpreting multiple truncated map_codes is not currently supported.
+                        """
+                    print(dedent(error))
+                    continue
+
+                # Otherwise IUCN reports the same map_code twice
+                error = f"""\
+                    Warning: The map_code '{map_code}' was found multiple times:
+                        first: {res[map_code]}
+                        new  : {hab}
+                    Using first data as IUCN redefining a map_code is unhandled.
+                    """
+                print(dedent(error))
             else:
                 res[map_code] = hab
 
