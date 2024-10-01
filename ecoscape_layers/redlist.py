@@ -156,6 +156,7 @@ class RedList:
                         Using first data as interpreting multiple truncated map_codes is not currently supported.
                         """
                     print(dedent(error))
+                    continue
 
                 # Otherwise IUCN reports the same map_code twice
                 error = f"""\
