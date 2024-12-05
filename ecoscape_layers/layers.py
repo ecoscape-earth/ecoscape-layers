@@ -41,6 +41,7 @@ class LayerGenerator:
         self.landcover_fn = os.path.abspath(landcover_fn)
         self.elevation_fn = os.path.abspath(elevation_fn) if elevation_fn else None
         self.iucn_range_src = iucn_range_src
+        
 
     def get_range_from_iucn(self, species_name: str, output_path: str):
         """Using IUCN gdb file, creates shapefiles usable for refining ranges for specific species with GDAL's ogr module.
