@@ -6,12 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "ecoscape-layers"
 version = "0.0.7"
 authors = [
-  {name="Jasmine Tai", email="cjtai@ucsc.edu"},
-  {name="Coen Adler", email="ctadler@ucsc.edu"},
-  {name="Luca de Alfaro", email="luca@ucsc.edu"},
-  {name="Artie Nazarov", email="anazarov@ucsc.edu"},
-  {name="Natalia Ocampo-Peñuela", email="nocampop@ucsc.edu"},
-  {name="Natalie Valett", email="nvalett@ucsc.edu"}
 ]
 description = "EcoScape habitat and matrix layer creation"
 readme = "README.md"
@@ -31,7 +25,3 @@ packages = ["ecoscape_layers"]
 
 [project.scripts]
 ecoscape-layers = "ecoscape_layers.main:cli"
-
-[project.urls]
-"Homepage" = "https://github.com/ecoscape-earth/ecoscape-layers"
-"Bug Tracker" = "https://github.com/ecoscape-earth/ecoscape-layers/issues"
