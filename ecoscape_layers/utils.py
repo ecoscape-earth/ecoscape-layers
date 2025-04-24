@@ -228,7 +228,7 @@ def default_refinement_method(
     if map_code not in habitats:
         return 1.0
 
-    if habitats[map_code]["majorimportance"]:
+    if habitats[map_code]["majorImportance"]:
         return 0.0
     elif habitats[map_code]["suitability"]:
         return 0.1
@@ -326,7 +326,7 @@ def get_current_habitat(
     Inputs for the overrides may consist of integers that represent specific map codes and strings that
     represent keywords, which will then be converted into map codes. These keywords can take the form of the
     IUCN Habitat Classification Scheme categories listed in the constants.py file. Additionally, you can
-    specify "majorimportance" or "suitable" to only use habitats with these qualities for a species.
+    specify "majorImportance" or "suitable" to only use habitats with these qualities for a species.
 
     Examples:
         overrides_forest308: ["forest", 308]
@@ -352,19 +352,19 @@ def get_current_habitat(
         # replace all IUCN habitat classification scheme keywords with map codes
         overrides = iucn_habs_to_codes(overrides)
 
-        # replace keywords (majorimportance, suitable) with map codes
+        # replace keywords (majorImportance, suitable) with map codes
         # search for the keywords and error on invalid keywords
         major_i = None
         suit_i = None
         for i in range(len(overrides)):
-            if overrides[i] == "majorimportance":
+            if overrides[i] == "majorImportance":
                 major_i = i
             elif overrides[i] == "suitable":
                 suit_i = i
             elif type(overrides[i]) is str:
                 error = f"""\
                     Keyword {overrides[i]} not found in IUCN habitat classification scheme keywords
-                    and is not 'majorimportance' or 'suitable'."""
+                    and is not 'majorImportance' or 'suitable'."""
                 raise KeyError(dedent(error))
 
         # define function to add new codes based on keyword
@@ -390,9 +390,9 @@ def get_current_habitat(
 
         # add new codes based on keywords
         if major_i is not None:
-            replace_keywords("majorimportance", major_i)
+            replace_keywords("majorImportance", major_i)
         if suit_i is not None:
-            replace_keywords("suitable", suit_i)
+            replace_keywords("suitability", suit_i)
 
         # remove and duplicates due to overlap
         overrides = list(set(overrides))
@@ -408,7 +408,7 @@ def get_current_habitat(
     # The default action is to return map_codes in which habitat is considered major importance by IUCN
     output = []
     for code, hab in habitats.items():
-        if hab["majorimportance"]:
+        if hab["majorImportance"]:
             output.append(code)
 
     return output

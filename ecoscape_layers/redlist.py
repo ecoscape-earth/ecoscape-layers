@@ -13,7 +13,7 @@ class RedList:
         Initializes a RedList object.
         API keys are required to access the IUCN Red List API and eBird API respectively; see the documentation for more information.
         """
-        self.redlist_params = {"token": redlist_key}
+        self.redlist_params = {"Authorization": redlist_key}
         self.ebird_key = ebird_key
 
     def get_from_redlist(self, url: str) -> dict:
@@ -23,14 +23,14 @@ class RedList:
         :param url: the URL for the request.
         :return: response for the request.
         """
-        res = requests.get(url, params=self.redlist_params)
+        res = requests.get(url, headers=self.redlist_params)
 
         if res.status_code != 200:
             raise ValueError(f"Error {res.status_code} in Red List API request")
 
         data: dict = res.json()
 
-        return data["result"]
+        return data
 
     def get_scientific_name(self, species_code: str) -> str:
         """Translates eBird codes to scientific names for use in Red List.
@@ -70,7 +70,7 @@ class RedList:
         return sci_name
 
     def get_habitat_data(
-        self, species_name: str, region=None, ebird_code: bool = False
+        self, species_name: str, ebird_code: bool = True
     ) -> dict[int, dict[str, str | bool]]:
         """Gets habitat assessments for suitability for a given species.
         This also adds the associated landcover/terrain map's code to the API response,
@@ -79,8 +79,7 @@ class RedList:
 
         Args:
             species_name (str): scientific name of the species.
-            region (_type_, optional): a specific region to assess habitats in (see https://apiv3.iucnredlist.org/api/v3/docs#regions).. Defaults to None.
-            ebird_code (bool, optional): If True, reads species_name as an eBird species_code and converts it to a scientific/iucn name. Defaults to False.
+            ebird_code (bool, optional): If True, reads species_name as an eBird species_code and converts it to a scientific/iucn name. Defaults to True.
 
         Raises:
             ValueError: Errors when the code received from the IUCN Redlist is missing a period or data after a period.
@@ -95,20 +94,30 @@ class RedList:
             sci_name = self.get_scientific_name(species_name)
         else:
             sci_name = species_name
+        # Split sci_name into genus and species
+        genus, species = sci_name.split()
 
-        url = f"https://apiv3.iucnredlist.org/api/v3/habitats/species/name/{sci_name}"
-        if region is not None:
-            url += f"/region/{region}"
-
-        habs = self.get_from_redlist(url)
+        url = f"https://api.iucnredlist.org/api/v4/taxa/scientific_name?genus_name={genus}&species_name={species}"
+        
+        assessments = self.get_from_redlist(url)["assessments"]
+        
+        # Get assessment code for latest global assessment for species
+        latest_assessment = [i for i in assessments if ((i["latest"] == True) & (i["scopes"][0]["code"] == '1'))][0]["assessment_id"]
+        
+        # Get habitats from latest global assessment for species
+        url = f"https://api.iucnredlist.org/api/v4/assessment/{latest_assessment}"
+        
+        habs = self.get_from_redlist(url)["habitats"]
+        
         res = {}
 
         for hab in habs:
             code = str(hab["code"])
 
+            # TODO: is this necessary? Codes seem to be x_x instea of xx.xx
             # some codes are in the format xx.xx.xx instead of xx.xx
             # we will truncate xx.xx.xx codes to xx.xx
-            code_sep = code.split(".")
+            code_sep = code.split("_")
 
             # check that code_sep len is not less than len of 2
             if len(code_sep) < 2:
@@ -125,7 +134,7 @@ class RedList:
             code_sep = map(lambda num_str: num_str.zfill(2), code_sep)
 
             # Convert bool like strings to bools
-            hab["majorimportance"] = hab["majorimportance"] == "Yes"
+            hab["majorImportance"] = hab["majorImportance"] == "Yes"
             hab["suitability"] = hab["suitability"] == "Suitable"
 
             # create a map_code that is represented by an int
